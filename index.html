@@ -406,6 +406,64 @@ async function storageSet(key, val){
   }catch(e){ return false; }
 }
 
+// Pulls final scores for one week from ESPN's public scoreboard feed and fills in any
+// game winner that isn't set yet. Matches games by team nickname (e.g. "Chiefs"), which
+// is how ESPN's shortDisplayName lines up with the names used throughout this app.
+async function fetchEspnScoreboard(week){
+  try{
+    const url = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week='+week;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+
+async function autoGradeWeek(week){
+  const data = await fetchEspnScoreboard(week);
+  if(!data || !data.events) return false;
+  const games = state.games[week] || [];
+  let changed = false;
+  data.events.forEach(ev=>{
+    const comp = ev.competitions && ev.competitions[0];
+    const status = comp && comp.status && comp.status.type;
+    if(!status || !status.completed) return;
+    const home = comp.competitors.find(c=>c.homeAway==='home');
+    const away = comp.competitors.find(c=>c.homeAway==='away');
+    if(!home || !away) return;
+    const homeScore = parseInt(home.score, 10);
+    const awayScore = parseInt(away.score, 10);
+    if(isNaN(homeScore) || isNaN(awayScore) || homeScore===awayScore) return;
+    const winnerSide = homeScore>awayScore ? 'home' : 'away';
+    const g = games.find(g=> g.home===home.team.shortDisplayName && g.away===away.team.shortDisplayName);
+    if(g && g.winner !== winnerSide){
+      g.winner = winnerSide;
+      changed = true;
+    }
+  });
+  if(changed){
+    await storageSet('games-week-'+week, games);
+    state.games[week] = games;
+  }
+  return changed;
+}
+
+// Checks every week that has at least one started-but-ungraded game, and re-renders if
+// anything changed. Safe to call often -- it only touches games missing a winner.
+async function autoGradeStaleWeeks(){
+  const now = Date.now();
+  let anyChanged = false;
+  for(const w of state.weeks){
+    if(!state.games[w]) state.games[w] = await storageGet('games-week-'+w) || [];
+    const games = state.games[w];
+    const hasStale = games.some(g=> !g.winner && new Date(g.kickoff).getTime() <= now);
+    if(!hasStale) continue;
+    const changed = await autoGradeWeek(w);
+    if(changed) anyChanged = true;
+  }
+  if(anyChanged) render();
+  return anyChanged;
+}
+
 async function init(){
   let players = await storageGet('players', true);
   if(!players){ players = DEFAULT_PLAYERS; await storageSet('players', players, true); }
@@ -635,7 +693,8 @@ function renderAdmin(main){
   if(week){
     const games = state.games[week] || [];
     html += '<section class="admin-block"><h2>Week '+week+' games</h2>';
-    html += '<div class="hint">Set the winner once a game is final — that grades everyone\'s pick for it.</div>';
+    html += '<div class="hint">Winners fill in automatically a few minutes after each game goes final — no need to enter them by hand. Set one manually here only if a game needs a correction.</div>';
+    html += '<div class="btn-row" style="margin-bottom:14px;"><button class="btn ghost" id="checkScoresNow">Check scores now</button><span class="saved-msg" id="scoresChecked" style="display:none;">Updated</span></div>';
     html += '<div id="gamesList">';
     games.forEach((g,i)=>{
       html += '<div class="grow" data-gidx="'+i+'">';
@@ -693,6 +752,15 @@ function renderAdmin(main){
   });
 
   if(week){
+    main.querySelector('#checkScoresNow').addEventListener('click', async (e)=>{
+      e.target.disabled = true;
+      e.target.textContent = 'Checking…';
+      await autoGradeWeek(week);
+      render();
+      // re-grab after re-render since the old node is gone
+      const s = document.getElementById('scoresChecked');
+      if(s){ s.style.display='inline'; setTimeout(()=>s.style.display='none', 1500); }
+    });
     main.querySelector('#addGame').addEventListener('click', ()=>{
       const games = state.games[week];
       games.push({id:'w'+week+'g'+(Date.now()), away:'', home:'', kickoff:new Date(Date.now()+3600000).toISOString(), winner:null});
@@ -746,8 +814,9 @@ document.querySelectorAll('.tab').forEach(t=>{
 });
 
 setInterval(()=>{ if(state.tab==='picks') render(); }, 30000);
+setInterval(()=>{ autoGradeStaleWeeks(); }, 3*60*1000);
 
-init();
+init().then(()=>{ autoGradeStaleWeeks(); });
 </script>
 </body>
 </html>
