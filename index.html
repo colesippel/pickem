@@ -4,19 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Sip & Linds Pick'em</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#12171C;
-    --surface:#1B2229;
-    --surface2:#232C34;
-    --border:#2E3944;
-    --text:#EDEFF1;
-    --text-dim:#8B98A5;
-    --accent:#C9A227;
-    --accent-text:#12171C;
-    --win:#3F8F5F;
-    --loss:#B3453D;
-    --locked:#5A6672;
+    --bg:#0A0E1A;
+    --surface:#121A2E;
+    --surface2:#1B2540;
+    --border:#2A3554;
+    --text:#F4F6FA;
+    --text-dim:#8792AC;
+    --accent:#E4002B;
+    --accent-text:#FFFFFF;
+    --gold:#C9A227;
+    --gold-text:#141008;
+    --win:#2E8B57;
+    --loss:#E4002B;
+    --locked:#6B7591;
+    --f-display:'Anton', Impact, "Arial Narrow Bold", sans-serif;
+    --f-condensed:'Oswald', -apple-system, "Segoe UI", sans-serif;
   }
   *{box-sizing:border-box;}
   body{
@@ -29,115 +36,161 @@
   #app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
 
   header.top{
-    position:sticky;top:0;z-index:10;
-    background:var(--bg);
-    border-bottom:1px solid var(--border);
-    padding:14px 16px 0 16px;
+    position:relative;
+    top:0;z-index:10;
+    background:
+      repeating-linear-gradient(120deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 34px),
+      linear-gradient(180deg, #0D1326 0%, var(--bg) 100%);
+    padding:16px 16px 0 16px;
+  }
+  header.top::after{
+    content:'';display:block;height:5px;margin-top:12px;
+    background:linear-gradient(90deg, var(--accent) 0%, var(--accent) 70%, var(--gold) 70%, var(--gold) 100%);
+    clip-path:polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
   }
   h1{
-    font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 12px 0;
+    font-family:var(--f-display);
+    font-size:26px;font-weight:400;letter-spacing:0.01em;margin:0 0 14px 0;
+    text-transform:uppercase;color:var(--text);
   }
-  .tabs{display:flex;gap:4px;}
+  .tabs{display:flex;gap:2px;position:sticky;top:0;background:var(--bg);z-index:10;}
   .tab{
-    flex:1;text-align:center;padding:10px 4px;font-size:14px;font-weight:600;
-    color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;
+    flex:1;text-align:center;padding:10px 4px 12px 4px;
+    font-family:var(--f-condensed);font-size:14px;font-weight:600;letter-spacing:0.04em;
+    text-transform:uppercase;
+    color:var(--text-dim);background:none;border:none;border-bottom:3px solid var(--border);
     cursor:pointer;
   }
-  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent);}
 
   main{flex:1;padding:16px;padding-bottom:48px;}
 
-  .weekrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;}
+  .weekrow{display:flex;gap:6px;overflow-x:auto;padding:4px 4px 8px 0;margin-bottom:16px;}
   .weekchip{
-    flex:0 0 auto;padding:7px 14px;border-radius:20px;border:1px solid var(--border);
-    background:var(--surface);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;
-    white-space:nowrap;
+    flex:0 0 auto;padding:8px 16px 8px 12px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-dim);
+    font-family:var(--f-condensed);font-size:13px;font-weight:600;letter-spacing:0.03em;
+    text-transform:uppercase;cursor:pointer;white-space:nowrap;
+    clip-path:polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
   }
-  .weekchip.active{background:var(--accent);color:var(--accent-text);border-color:var(--accent);}
+  .weekchip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
   select.whoami{
-    width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);
+    width:100%;padding:12px;border-radius:6px;border:1px solid var(--border);
     background:var(--surface);color:var(--text);font-size:15px;font-weight:600;margin-bottom:16px;
     -webkit-appearance:none;appearance:none;
   }
 
   .card{
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;
-    padding:14px;margin-bottom:12px;
+    background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--border);
+    border-radius:4px;padding:14px;margin-bottom:12px;
   }
-  .card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-  .kickoff{font-size:12px;color:var(--text-dim);font-weight:600;}
-  .status{font-size:12px;font-weight:700;}
-  .status.open{color:var(--text-dim);}
-  .status.locked{color:var(--locked);}
-  .status.final{color:var(--accent);}
+  .card.card-locked{border-left-color:var(--accent);}
+  .card.card-final{border-left-color:var(--gold);}
+  .card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;}
+  .kickoff{font-family:var(--f-condensed);font-size:12px;color:var(--text-dim);font-weight:500;letter-spacing:0.02em;}
+  .status{
+    font-family:var(--f-condensed);font-size:11px;font-weight:700;letter-spacing:0.05em;
+    text-transform:uppercase;padding:3px 12px 3px 9px;white-space:nowrap;
+    clip-path:polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  }
+  .status.open{color:var(--text-dim);background:var(--surface2);}
+  .status.locked{color:#fff;background:var(--accent);}
+  .status.final{color:var(--gold-text);background:var(--gold);}
 
   .matchup{display:flex;gap:8px;}
   .teambtn{
-    flex:1;padding:14px 8px;border-radius:10px;border:1.5px solid var(--border);
-    background:var(--surface2);color:var(--text);font-size:14px;font-weight:700;
-    cursor:pointer;text-align:center;line-height:1.3;
+    flex:1;padding:14px 6px;border-radius:5px;border:1.5px solid var(--border);
+    background:var(--surface2);color:var(--text);
+    font-family:var(--f-display);font-size:16px;font-weight:400;letter-spacing:0.01em;
+    text-transform:uppercase;cursor:pointer;text-align:center;line-height:1.25;
   }
-  .teambtn .at{display:block;font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:2px;}
-  .teambtn.picked{border-color:var(--accent);background:rgba(201,162,39,0.15);}
-  .teambtn.winner{border-color:var(--win);background:rgba(63,143,95,0.18);}
-  .teambtn.disabled{opacity:0.55;cursor:default;}
+  .teambtn .at{
+    display:inline-block;font-family:var(--f-condensed);font-size:9px;font-weight:700;
+    letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim);
+    background:rgba(135,146,172,0.14);padding:2px 8px;border-radius:2px;margin-bottom:6px;
+  }
+  .teambtn .spreadline{
+    display:block;font-family:var(--f-condensed);font-size:11px;font-weight:600;
+    color:var(--text-dim);margin-top:5px;letter-spacing:0.02em;
+  }
+  .teambtn.picked{border-color:var(--gold);background:rgba(201,162,39,0.14);}
+  .teambtn.picked .at{background:rgba(201,162,39,0.25);color:var(--gold);}
+  .teambtn.winner{border-color:var(--win);background:rgba(46,139,87,0.16);}
+  .teambtn.disabled{opacity:0.5;cursor:default;}
 
-  .subrow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--text-dim);}
-  .tag{padding:2px 8px;border-radius:6px;font-weight:700;font-size:11px;}
-  .tag.correct{background:rgba(63,143,95,0.2);color:var(--win);}
-  .tag.incorrect{background:rgba(179,69,61,0.2);color:var(--loss);}
-  .tag.nopick{background:rgba(179,69,61,0.2);color:var(--loss);}
+  .subrow{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;gap:6px;}
+  .tag{
+    font-family:var(--f-condensed);padding:3px 10px;font-weight:700;font-size:11px;
+    letter-spacing:0.04em;text-transform:uppercase;
+    clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  }
+  .tag.correct{background:rgba(46,139,87,0.22);color:var(--win);}
+  .tag.incorrect{background:rgba(228,0,43,0.18);color:var(--loss);}
+  .tag.nopick{background:rgba(228,0,43,0.18);color:var(--loss);}
 
   .empty{color:var(--text-dim);font-size:14px;text-align:center;padding:40px 16px;}
 
   table.standings{width:100%;border-collapse:collapse;}
   table.standings th{
-    text-align:left;font-size:11px;color:var(--text-dim);font-weight:700;
-    padding:0 8px 8px 8px;border-bottom:1px solid var(--border);
+    text-align:left;font-family:var(--f-condensed);font-size:11px;color:var(--text-dim);
+    font-weight:600;letter-spacing:0.06em;text-transform:uppercase;
+    padding:0 8px 8px 8px;border-bottom:2px solid var(--accent);
   }
-  table.standings td{padding:12px 8px;border-bottom:1px solid var(--border);font-size:14px;}
+  table.standings td{padding:13px 8px;border-bottom:1px solid var(--border);font-size:14px;}
   table.standings tr:last-child td{border-bottom:none;}
-  .rank{color:var(--text-dim);font-weight:700;width:24px;}
-  .pname{font-weight:700;}
-  .rec{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
-  .pct{text-align:right;color:var(--text-dim);font-size:12px;}
+  .rank{font-family:var(--f-display);font-size:20px;color:var(--text-dim);width:28px;}
+  table.standings tr:nth-child(1) .rank{color:var(--gold);}
+  table.standings tr:nth-child(2) .rank{color:#C7CBD6;}
+  table.standings tr:nth-child(3) .rank{color:#C87D3B;}
+  .pname{font-family:var(--f-condensed);font-weight:600;letter-spacing:0.01em;}
+  .rec{text-align:right;font-family:var(--f-display);font-size:17px;color:var(--text);font-variant-numeric:tabular-nums;}
+  .pct{text-align:right;color:var(--text-dim);font-size:12px;font-family:var(--f-condensed);}
 
   section.admin-block{margin-bottom:24px;}
-  section.admin-block h2{font-size:14px;font-weight:800;margin:0 0 10px 0;color:var(--accent);}
+  section.admin-block h2{
+    font-family:var(--f-condensed);font-size:14px;font-weight:700;letter-spacing:0.04em;
+    text-transform:uppercase;margin:0 0 10px 0;color:var(--text);
+    border-left:3px solid var(--accent);padding-left:9px;
+  }
   .prow{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
   .prow input[type=text]{
-    flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);
+    flex:1;padding:10px;border-radius:6px;border:1px solid var(--border);
     background:var(--surface2);color:var(--text);font-size:14px;
   }
   .grow{
-    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
     padding:10px;margin-bottom:8px;
   }
   .grow-fields{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
   .grow input[type=text]{
-    flex:1 1 90px;padding:8px;border-radius:6px;border:1px solid var(--border);
+    flex:1 1 90px;padding:8px;border-radius:5px;border:1px solid var(--border);
     background:var(--surface2);color:var(--text);font-size:13px;min-width:80px;
   }
   .grow input[type=datetime-local]{
-    flex:1 1 150px;padding:8px;border-radius:6px;border:1px solid var(--border);
+    flex:1 1 150px;padding:8px;border-radius:5px;border:1px solid var(--border);
     background:var(--surface2);color:var(--text);font-size:13px;
   }
   .grow select{
-    padding:8px;border-radius:6px;border:1px solid var(--border);
+    padding:8px;border-radius:5px;border:1px solid var(--border);
     background:var(--surface2);color:var(--text);font-size:13px;
   }
   .iconbtn{
     background:none;border:none;color:var(--loss);font-size:18px;cursor:pointer;padding:4px 8px;
   }
   .btn{
-    display:inline-block;padding:11px 16px;border-radius:10px;border:none;
-    background:var(--accent);color:var(--accent-text);font-weight:700;font-size:14px;cursor:pointer;
+    display:inline-block;padding:11px 18px;border-radius:5px;border:none;
+    background:var(--accent);color:#fff;
+    font-family:var(--f-condensed);font-weight:700;font-size:14px;letter-spacing:0.03em;
+    text-transform:uppercase;cursor:pointer;
   }
   .btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
   .btn-row{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;}
   .hint{font-size:12px;color:var(--text-dim);margin:-4px 0 12px 0;line-height:1.5;}
-  .saved-msg{font-size:12px;color:var(--win);font-weight:700;margin-left:8px;}
+  .saved-msg{
+    font-family:var(--f-condensed);font-size:12px;color:var(--win);font-weight:700;
+    letter-spacing:0.03em;text-transform:uppercase;margin-left:8px;
+  }
 </style>
 </head>
 <body>
@@ -410,34 +463,62 @@ async function storageSet(key, val){
 // game winner that isn't set yet. Matches games by team nickname (e.g. "Chiefs"), which
 // is how ESPN's shortDisplayName lines up with the names used throughout this app.
 async function fetchEspnScoreboard(week){
+  const target = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week='+week;
+  // Try fetching ESPN directly first.
   try{
-    const url = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week='+week;
-    const res = await fetch(url);
-    if(!res.ok) return null;
-    return await res.json();
+    const res = await fetch(target);
+    if(res.ok) return await res.json();
+  }catch(e){ /* likely blocked by CORS from this origin -- fall through to proxy */ }
+  // Fallback: ESPN's endpoint doesn't always send the header a browser needs to read
+  // a cross-origin response, so route through a public, no-signup CORS proxy instead.
+  try{
+    const proxied = 'https://api.allorigins.win/raw?url='+encodeURIComponent(target);
+    const res2 = await fetch(proxied);
+    if(!res2.ok) return null;
+    return await res2.json();
   }catch(e){ return null; }
 }
 
-async function autoGradeWeek(week){
+// Pulls both the current point spread and (once final) the winner for one week from
+// ESPN's public scoreboard feed, in a single request. Matches games by team nickname
+// (e.g. "Chiefs"), which is how ESPN's shortDisplayName lines up with the names used
+// throughout this app. Spread is stored as {home:'-3.5', away:'+3.5'} straight off
+// ESPN's own point-spread line, so it always reads correctly for whichever side it's
+// shown next to.
+async function syncWeekFromEspn(week){
   const data = await fetchEspnScoreboard(week);
   if(!data || !data.events) return false;
   const games = state.games[week] || [];
   let changed = false;
   data.events.forEach(ev=>{
     const comp = ev.competitions && ev.competitions[0];
-    const status = comp && comp.status && comp.status.type;
-    if(!status || !status.completed) return;
+    if(!comp) return;
     const home = comp.competitors.find(c=>c.homeAway==='home');
     const away = comp.competitors.find(c=>c.homeAway==='away');
     if(!home || !away) return;
-    const homeScore = parseInt(home.score, 10);
-    const awayScore = parseInt(away.score, 10);
-    if(isNaN(homeScore) || isNaN(awayScore) || homeScore===awayScore) return;
-    const winnerSide = homeScore>awayScore ? 'home' : 'away';
     const g = games.find(g=> g.home===home.team.shortDisplayName && g.away===away.team.shortDisplayName);
-    if(g && g.winner !== winnerSide){
-      g.winner = winnerSide;
+    if(!g) return;
+
+    const oddsEntry = comp.odds && comp.odds[0];
+    const ps = oddsEntry && oddsEntry.pointSpread;
+    const homeLine = ps && ps.home && ps.home.close && ps.home.close.line;
+    const awayLine = ps && ps.away && ps.away.close && ps.away.close.line;
+    if(homeLine && awayLine && (!g.spread || g.spread.home!==homeLine || g.spread.away!==awayLine)){
+      g.spread = {home:homeLine, away:awayLine};
       changed = true;
+    }
+
+    const status = comp.status && comp.status.type;
+    if(status && status.completed){
+      const homeScore = parseInt(home.score, 10);
+      const awayScore = parseInt(away.score, 10);
+      if(!isNaN(homeScore) && !isNaN(awayScore) && homeScore!==awayScore){
+        const winnerSide = homeScore>awayScore ? 'home' : 'away';
+        if(g.winner !== winnerSide){
+          g.winner = winnerSide;
+          changed = true;
+        }
+      }
     }
   });
   if(changed){
@@ -447,17 +528,23 @@ async function autoGradeWeek(week){
   return changed;
 }
 
-// Checks every week that has at least one started-but-ungraded game, and re-renders if
-// anything changed. Safe to call often -- it only touches games missing a winner.
-async function autoGradeStaleWeeks(){
+// Keeps the currently-viewed week's spreads current, and grades any started-but-
+// ungraded game in any week. Safe to call often -- reads are cheap and writes only
+// happen when something actually changed.
+async function syncStaleAndActiveWeeks(){
   const now = Date.now();
   let anyChanged = false;
+  if(state.activeWeek){
+    const changed = await syncWeekFromEspn(state.activeWeek);
+    if(changed) anyChanged = true;
+  }
   for(const w of state.weeks){
+    if(w === state.activeWeek) continue;
     if(!state.games[w]) state.games[w] = await storageGet('games-week-'+w) || [];
     const games = state.games[w];
     const hasStale = games.some(g=> !g.winner && new Date(g.kickoff).getTime() <= now);
     if(!hasStale) continue;
-    const changed = await autoGradeWeek(w);
+    const changed = await syncWeekFromEspn(w);
     if(changed) anyChanged = true;
   }
   if(anyChanged) render();
@@ -601,7 +688,7 @@ function renderPicks(main){
       else if(locked){ statusHtml = 'Locked'; statusClass='locked'; }
       else { statusHtml = 'Locks in '+remain; statusClass='open'; }
 
-      html += '<div class="card">';
+      html += '<div class="card card-'+(g.winner?'final':(locked?'locked':'open'))+'">';
       html += '<div class="card-top"><span class="kickoff">'+fmtKickoff(g.kickoff)+(g.tbd?' · time TBD':'')+'</span><span class="status '+statusClass+'">'+statusHtml+'</span></div>';
       html += '<div class="matchup">';
       ['away','home'].forEach(side=>{
@@ -612,7 +699,9 @@ function renderPicks(main){
         if(locked && !player) cls += ' disabled';
         if(locked || !player) cls += (locked||!player) ? ' disabled' : '';
         html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+((locked||!player)?'disabled':'')+'>'
-          + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)+'</button>';
+          + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)
+          + (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : '')
+          + '</button>';
       });
       html += '</div>';
 
@@ -693,8 +782,8 @@ function renderAdmin(main){
   if(week){
     const games = state.games[week] || [];
     html += '<section class="admin-block"><h2>Week '+week+' games</h2>';
-    html += '<div class="hint">Winners fill in automatically a few minutes after each game goes final — no need to enter them by hand. Set one manually here only if a game needs a correction.</div>';
-    html += '<div class="btn-row" style="margin-bottom:14px;"><button class="btn ghost" id="checkScoresNow">Check scores now</button><span class="saved-msg" id="scoresChecked" style="display:none;">Updated</span></div>';
+    html += '<div class="hint">Point spreads and winners fill in automatically — spreads update as the line moves, and winners fill in a few minutes after each game goes final. No need to enter either by hand.</div>';
+    html += '<div class="btn-row" style="margin-bottom:14px;"><button class="btn ghost" id="checkScoresNow">Check spreads &amp; scores now</button><span class="saved-msg" id="scoresChecked" style="display:none;">Updated</span></div>';
     html += '<div id="gamesList">';
     games.forEach((g,i)=>{
       html += '<div class="grow" data-gidx="'+i+'">';
@@ -755,7 +844,7 @@ function renderAdmin(main){
     main.querySelector('#checkScoresNow').addEventListener('click', async (e)=>{
       e.target.disabled = true;
       e.target.textContent = 'Checking…';
-      await autoGradeWeek(week);
+      await syncWeekFromEspn(week);
       render();
       // re-grab after re-render since the old node is gone
       const s = document.getElementById('scoresChecked');
@@ -814,9 +903,9 @@ document.querySelectorAll('.tab').forEach(t=>{
 });
 
 setInterval(()=>{ if(state.tab==='picks') render(); }, 30000);
-setInterval(()=>{ autoGradeStaleWeeks(); }, 3*60*1000);
+setInterval(()=>{ syncStaleAndActiveWeeks(); }, 3*60*1000);
 
-init().then(()=>{ autoGradeStaleWeeks(); });
+init().then(()=>{ syncStaleAndActiveWeeks(); });
 </script>
 </body>
 </html>
