@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Sip & Linds Pick'em</title>
+<style>
+  :root{
+    --bg:#12171C;
+    --surface:#1B2229;
+    --surface2:#232C34;
+    --border:#2E3944;
+    --text:#EDEFF1;
+    --text-dim:#8B98A5;
+    --accent:#C9A227;
+    --accent-text:#12171C;
+    --win:#3F8F5F;
+    --loss:#B3453D;
+    --locked:#5A6672;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+
+  header.top{
+    position:sticky;top:0;z-index:10;
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    padding:14px 16px 0 16px;
+  }
+  h1{
+    font-size:22px;font-weight:800;letter-spacing:-0.02em;margin:0 0 12px 0;
+  }
+  .tabs{display:flex;gap:4px;}
+  .tab{
+    flex:1;text-align:center;padding:10px 4px;font-size:14px;font-weight:600;
+    color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;
+    cursor:pointer;
+  }
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  main{flex:1;padding:16px;padding-bottom:48px;}
+
+  .weekrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;}
+  .weekchip{
+    flex:0 0 auto;padding:7px 14px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;
+    white-space:nowrap;
+  }
+  .weekchip.active{background:var(--accent);color:var(--accent-text);border-color:var(--accent);}
+
+  select.whoami{
+    width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text);font-size:15px;font-weight:600;margin-bottom:16px;
+    -webkit-appearance:none;appearance:none;
+  }
+
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:14px;margin-bottom:12px;
+  }
+  .card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .kickoff{font-size:12px;color:var(--text-dim);font-weight:600;}
+  .status{font-size:12px;font-weight:700;}
+  .status.open{color:var(--text-dim);}
+  .status.locked{color:var(--locked);}
+  .status.final{color:var(--accent);}
+
+  .matchup{display:flex;gap:8px;}
+  .teambtn{
+    flex:1;padding:14px 8px;border-radius:10px;border:1.5px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:14px;font-weight:700;
+    cursor:pointer;text-align:center;line-height:1.3;
+  }
+  .teambtn .at{display:block;font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:2px;}
+  .teambtn.picked{border-color:var(--accent);background:rgba(201,162,39,0.15);}
+  .teambtn.winner{border-color:var(--win);background:rgba(63,143,95,0.18);}
+  .teambtn.disabled{opacity:0.55;cursor:default;}
+
+  .subrow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--text-dim);}
+  .tag{padding:2px 8px;border-radius:6px;font-weight:700;font-size:11px;}
+  .tag.correct{background:rgba(63,143,95,0.2);color:var(--win);}
+  .tag.incorrect{background:rgba(179,69,61,0.2);color:var(--loss);}
+  .tag.nopick{background:rgba(179,69,61,0.2);color:var(--loss);}
+
+  .empty{color:var(--text-dim);font-size:14px;text-align:center;padding:40px 16px;}
+
+  table.standings{width:100%;border-collapse:collapse;}
+  table.standings th{
+    text-align:left;font-size:11px;color:var(--text-dim);font-weight:700;
+    padding:0 8px 8px 8px;border-bottom:1px solid var(--border);
+  }
+  table.standings td{padding:12px 8px;border-bottom:1px solid var(--border);font-size:14px;}
+  table.standings tr:last-child td{border-bottom:none;}
+  .rank{color:var(--text-dim);font-weight:700;width:24px;}
+  .pname{font-weight:700;}
+  .rec{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+  .pct{text-align:right;color:var(--text-dim);font-size:12px;}
+
+  section.admin-block{margin-bottom:24px;}
+  section.admin-block h2{font-size:14px;font-weight:800;margin:0 0 10px 0;color:var(--accent);}
+  .prow{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+  .prow input[type=text]{
+    flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:14px;
+  }
+  .grow{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:10px;margin-bottom:8px;
+  }
+  .grow-fields{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .grow input[type=text]{
+    flex:1 1 90px;padding:8px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:13px;min-width:80px;
+  }
+  .grow input[type=datetime-local]{
+    flex:1 1 150px;padding:8px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:13px;
+  }
+  .grow select{
+    padding:8px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:13px;
+  }
+  .iconbtn{
+    background:none;border:none;color:var(--loss);font-size:18px;cursor:pointer;padding:4px 8px;
+  }
+  .btn{
+    display:inline-block;padding:11px 16px;border-radius:10px;border:none;
+    background:var(--accent);color:var(--accent-text);font-weight:700;font-size:14px;cursor:pointer;
+  }
+  .btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+  .btn-row{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;}
+  .hint{font-size:12px;color:var(--text-dim);margin:-4px 0 12px 0;line-height:1.5;}
+  .saved-msg{font-size:12px;color:var(--win);font-weight:700;margin-left:8px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <h1>Sip &amp; Linds Pick'em</h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="picks">Picks</button>
+      <button class="tab" data-tab="standings">Standings</button>
+      <button class="tab" data-tab="admin">Admin</button>
+    </div>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+</div>
+
+<script>
+const state = {
+  players: [],
+  weeks: [],
+  games: {},
+  picks: {},
+  activeWeek: null,
+  standingsWeek: 'all',
+  adminWeek: null,
+  tab: 'picks',
+  currentPlayerId: null,
+  loaded: false,
+};
+
+const DEFAULT_PLAYERS = ['Cole','Derek','Nate','Travis','Jared','Ryan','Joe','Ty']
+  .map((name,i)=>({id:'p'+(i+1), name}));
+
+// Converts an ET wall-clock date/time into a correct ISO string, accounting for the
+// 2026-11-01 DST fallback (EDT before, EST from Nov 1 on through the rest of the season).
+function et(dateStr, timeStr){
+  const d = new Date(dateStr+'T00:00:00Z');
+  const dstEnd = new Date('2026-11-01T00:00:00Z');
+  const offset = d < dstEnd ? '-04:00' : '-05:00';
+  return dateStr+'T'+timeStr+':00'+offset;
+}
+
+// Full 2026 regular-season schedule (weeks 1-18), pre-loaded so nothing has to be typed in.
+// Entries: [away, home, date, time24 (ET)]. A trailing true marks a game whose exact kickoff
+// window wasn't set by the league yet at build time (flex/TBD) -- a placeholder time is used
+// so the game still locks sensibly; adjust it in Admin once the real time is announced.
+// A small handful of Weeks 16-18 games with completely unannounced matchups are left out
+// entirely -- add them in Admin once the teams are known.
+const SEASON_SCHEDULE = {
+  1: [
+    ['Patriots','Seahawks','2026-09-09','20:20'],['49ers','Rams','2026-09-10','20:35'],
+    ['Bears','Panthers','2026-09-13','13:00'],['Buccaneers','Bengals','2026-09-13','13:00'],
+    ['Ravens','Colts','2026-09-13','13:00'],['Bills','Texans','2026-09-13','13:00'],
+    ['Saints','Lions','2026-09-13','13:00'],['Jets','Titans','2026-09-13','13:00'],
+    ['Falcons','Steelers','2026-09-13','13:00'],['Browns','Jaguars','2026-09-13','13:00'],
+    ['Cardinals','Chargers','2026-09-13','16:25'],['Dolphins','Raiders','2026-09-13','16:25'],
+    ['Packers','Vikings','2026-09-13','16:25'],['Commanders','Eagles','2026-09-13','16:25'],
+    ['Cowboys','Giants','2026-09-13','20:20'],['Broncos','Chiefs','2026-09-14','20:15'],
+  ],
+  2: [
+    ['Lions','Bills','2026-09-17','20:15'],['Vikings','Bears','2026-09-20','13:00'],
+    ['Eagles','Titans','2026-09-20','13:00'],['Packers','Jets','2026-09-20','13:00'],
+    ['Panthers','Falcons','2026-09-20','13:00'],['Saints','Ravens','2026-09-20','13:00'],
+    ['Bengals','Texans','2026-09-20','13:00'],['Browns','Buccaneers','2026-09-20','13:00'],
+    ['Steelers','Patriots','2026-09-20','13:00'],['Raiders','Chargers','2026-09-20','16:05'],
+    ['Jaguars','Broncos','2026-09-20','16:05'],['Commanders','Cowboys','2026-09-20','16:25'],
+    ['Seahawks','Cardinals','2026-09-20','16:25'],['Dolphins','49ers','2026-09-20','16:25'],
+    ['Colts','Chiefs','2026-09-20','20:20'],['Giants','Rams','2026-09-21','20:15'],
+  ],
+  3: [
+    ['Falcons','Packers','2026-09-24','20:15'],['Chiefs','Dolphins','2026-09-27','13:00'],
+    ['Texans','Colts','2026-09-27','13:00'],['Titans','Giants','2026-09-27','13:00'],
+    ['Patriots','Jaguars','2026-09-27','13:00'],['Bengals','Steelers','2026-09-27','13:00'],
+    ['Panthers','Browns','2026-09-27','13:00'],['Jets','Lions','2026-09-27','13:00'],
+    ['Seahawks','Commanders','2026-09-27','13:00'],['Chargers','Bills','2026-09-27','13:00'],
+    ['Vikings','Buccaneers','2026-09-27','16:05'],['Cardinals','49ers','2026-09-27','16:05'],
+    ['Ravens','Cowboys','2026-09-27','16:25'],['Raiders','Saints','2026-09-27','16:25'],
+    ['Rams','Broncos','2026-09-27','20:20'],['Eagles','Bears','2026-09-28','20:15'],
+  ],
+  4: [
+    ['Steelers','Browns','2026-10-01','20:15'],['Colts','Commanders','2026-10-04','09:30'],
+    ['Titans','Ravens','2026-10-04','13:00'],['Cardinals','Giants','2026-10-04','13:00'],
+    ['Jaguars','Bengals','2026-10-04','13:00'],['Patriots','Bills','2026-10-04','13:00'],
+    ['Cowboys','Texans','2026-10-04','13:00'],['Rams','Eagles','2026-10-04','13:00'],
+    ['Packers','Buccaneers','2026-10-04','13:00'],['Jets','Bears','2026-10-04','13:00'],
+    ['Dolphins','Vikings','2026-10-04','16:05'],['Broncos','49ers','2026-10-04','16:25'],
+    ['Chargers','Seahawks','2026-10-04','16:25'],['Chiefs','Raiders','2026-10-04','16:25'],
+    ['Lions','Panthers','2026-10-04','20:20'],['Falcons','Saints','2026-10-05','20:15'],
+  ],
+  5: [
+    ['Buccaneers','Cowboys','2026-10-08','20:15'],['Eagles','Jaguars','2026-10-11','09:30'],
+    ['Raiders','Patriots','2026-10-11','13:00'],['Texans','Titans','2026-10-11','13:00'],
+    ['Browns','Jets','2026-10-11','13:00'],['Colts','Steelers','2026-10-11','13:00'],
+    ['Bengals','Dolphins','2026-10-11','13:00'],['Vikings','Saints','2026-10-11','13:00'],
+    ['Giants','Commanders','2026-10-11','13:00'],['Broncos','Chargers','2026-10-11','16:05'],
+    ['Bears','Packers','2026-10-11','16:25'],['Lions','Cardinals','2026-10-11','16:25'],
+    ['49ers','Seahawks','2026-10-11','16:25'],['Ravens','Falcons','2026-10-11','20:20'],
+    ['Bills','Rams','2026-10-12','20:15'],
+  ],
+  6: [
+    ['Seahawks','Broncos','2026-10-15','20:15'],['Texans','Jaguars','2026-10-18','09:30'],
+    ['Jets','Patriots','2026-10-18','13:00'],['Steelers','Buccaneers','2026-10-18','13:00'],
+    ['Panthers','Eagles','2026-10-18','13:00'],['Bears','Falcons','2026-10-18','13:00'],
+    ['Titans','Colts','2026-10-18','13:00'],['Saints','Giants','2026-10-18','13:00'],
+    ['Ravens','Browns','2026-10-18','13:00'],['Cardinals','Rams','2026-10-18','16:05'],
+    ['Chargers','Chiefs','2026-10-18','16:25'],['Bills','Raiders','2026-10-18','16:25'],
+    ['Cowboys','Packers','2026-10-18','20:20'],['Commanders','49ers','2026-10-19','20:15'],
+  ],
+  7: [
+    ['Patriots','Bears','2026-10-22','20:15'],['Steelers','Saints','2026-10-25','09:30'],
+    ['Browns','Titans','2026-10-25','13:00'],['Dolphins','Jets','2026-10-25','13:00'],
+    ['Colts','Vikings','2026-10-25','13:00'],['Bengals','Ravens','2026-10-25','13:00'],
+    ['Giants','Texans','2026-10-25','13:00'],['Buccaneers','Panthers','2026-10-25','13:00'],
+    ['49ers','Falcons','2026-10-25','13:00'],['Broncos','Cardinals','2026-10-25','16:05'],
+    ['Rams','Raiders','2026-10-25','16:25'],['Packers','Lions','2026-10-25','16:25'],
+    ['Chiefs','Seahawks','2026-10-25','20:20'],['Cowboys','Eagles','2026-10-26','20:15'],
+  ],
+  8: [
+    ['Panthers','Packers','2026-10-29','20:15'],['Titans','Bengals','2026-11-01','13:00'],
+    ['Colts','Jaguars','2026-11-01','13:00'],['Browns','Steelers','2026-11-01','13:00'],
+    ['Ravens','Bills','2026-11-01','13:00'],['Falcons','Buccaneers','2026-11-01','13:00'],
+    ['Vikings','Lions','2026-11-01','13:00'],['Cardinals','Cowboys','2026-11-01','13:00'],
+    ['Raiders','Jets','2026-11-01','13:00'],['Chargers','Rams','2026-11-01','16:05'],
+    ['Chiefs','Broncos','2026-11-01','16:25'],['Patriots','Dolphins','2026-11-01','16:25'],
+    ['Eagles','Commanders','2026-11-01','20:20'],['Bears','Seahawks','2026-11-02','20:15'],
+  ],
+  9: [
+    ['Jaguars','Ravens','2026-11-05','20:15'],['Bengals','Falcons','2026-11-08','09:30'],
+    ['Jets','Chiefs','2026-11-08','13:00'],['Browns','Saints','2026-11-08','13:00'],
+    ['Broncos','Panthers','2026-11-08','13:00'],['Cowboys','Colts','2026-11-08','13:00'],
+    ['Lions','Dolphins','2026-11-08','13:00'],['Giants','Eagles','2026-11-08','13:00'],
+    ['Rams','Commanders','2026-11-08','13:00'],['Raiders','49ers','2026-11-08','16:05'],
+    ['Texans','Chargers','2026-11-08','16:05'],['Cardinals','Seahawks','2026-11-08','16:25'],
+    ['Packers','Patriots','2026-11-08','16:25'],['Buccaneers','Bears','2026-11-08','20:20'],
+    ['Bills','Vikings','2026-11-09','20:15'],
+  ],
+  10: [
+    ['Commanders','Giants','2026-11-12','20:15'],['Patriots','Lions','2026-11-15','09:30'],
+    ['Bills','Jets','2026-11-15','13:00'],['Dolphins','Colts','2026-11-15','13:00'],
+    ['Chiefs','Falcons','2026-11-15','13:00'],['Vikings','Packers','2026-11-15','13:00'],
+    ['Jaguars','Titans','2026-11-15','13:00'],['Texans','Browns','2026-11-15','13:00'],
+    ['Panthers','Saints','2026-11-15','13:00'],['Rams','Cardinals','2026-11-15','16:05'],
+    ['Seahawks','Raiders','2026-11-15','16:05'],['49ers','Cowboys','2026-11-15','16:25'],
+    ['Steelers','Bengals','2026-11-15','20:20'],['Chargers','Ravens','2026-11-16','20:15'],
+  ],
+  11: [
+    ['Colts','Texans','2026-11-19','20:15'],['Cardinals','Chiefs','2026-11-22','13:00'],
+    ['Buccaneers','Lions','2026-11-22','13:00'],['Jaguars','Giants','2026-11-22','13:00'],
+    ['Dolphins','Bills','2026-11-22','13:00'],['Titans','Cowboys','2026-11-22','13:00'],
+    ['Ravens','Panthers','2026-11-22','13:00'],['Saints','Bears','2026-11-22','13:00'],
+    ['Jets','Chargers','2026-11-22','16:05'],['Steelers','Eagles','2026-11-22','16:25'],
+    ['Raiders','Broncos','2026-11-22','16:25'],['Vikings','49ers','2026-11-22','20:20'],
+    ['Bengals','Commanders','2026-11-23','20:15'],
+  ],
+  12: [
+    ['Packers','Rams','2026-11-25','20:00'],['Bears','Lions','2026-11-26','13:00'],
+    ['Eagles','Cowboys','2026-11-26','16:30'],['Chiefs','Bills','2026-11-26','20:20'],
+    ['Broncos','Steelers','2026-11-27','15:00'],['Ravens','Texans','2026-11-29','13:00'],
+    ['Saints','Bengals','2026-11-29','13:00'],['Jets','Dolphins','2026-11-29','13:00'],
+    ['Falcons','Vikings','2026-11-29','13:00'],['Giants','Colts','2026-11-29','13:00'],
+    ['Raiders','Browns','2026-11-29','13:00'],['Titans','Jaguars','2026-11-29','16:05'],
+    ['Commanders','Cardinals','2026-11-29','16:25'],['Seahawks','49ers','2026-11-29','16:25'],
+    ['Patriots','Chargers','2026-11-29','20:20'],['Panthers','Buccaneers','2026-11-30','20:15'],
+  ],
+  13: [
+    ['Chiefs','Rams','2026-12-03','20:15'],['Lions','Falcons','2026-12-06','13:00'],
+    ['Chargers','Buccaneers','2026-12-06','13:00'],['Commanders','Titans','2026-12-06','13:00'],
+    ['Bengals','Browns','2026-12-06','13:00'],['49ers','Giants','2026-12-06','13:00'],
+    ['Packers','Saints','2026-12-06','13:00'],['Jaguars','Bears','2026-12-06','13:00'],
+    ['Eagles','Cardinals','2026-12-06','16:05'],['Dolphins','Broncos','2026-12-06','16:05'],
+    ['Panthers','Vikings','2026-12-06','16:25'],['Bills','Patriots','2026-12-06','16:25'],
+    ['Texans','Steelers','2026-12-06','20:20'],['Cowboys','Seahawks','2026-12-07','20:15'],
+  ],
+  14: [
+    ['Vikings','Patriots','2026-12-10','20:15'],['Broncos','Jets','2026-12-13','13:00'],
+    ['Falcons','Browns','2026-12-13','13:00'],['Bears','Dolphins','2026-12-13','13:00'],
+    ['Texans','Commanders','2026-12-13','13:00'],['Saints','Panthers','2026-12-13','13:00'],
+    ['Colts','Eagles','2026-12-13','13:00'],['Buccaneers','Ravens','2026-12-13','13:00'],
+    ['Titans','Lions','2026-12-13','13:00'],['Chargers','Raiders','2026-12-13','16:05'],
+    ['Chiefs','Bengals','2026-12-13','16:25'],['Rams','49ers','2026-12-13','16:25'],
+    ['Giants','Seahawks','2026-12-13','16:25'],['Bills','Packers','2026-12-13','20:20'],
+    ['Steelers','Jaguars','2026-12-14','20:15'],
+  ],
+  15: [
+    ['49ers','Chargers','2026-12-17','20:15'],['Seahawks','Eagles','2026-12-19','17:00'],
+    ['Bears','Bills','2026-12-19','20:20'],['Jaguars','Texans','2026-12-20','13:00'],
+    ['Ravens','Steelers','2026-12-20','13:00'],['Browns','Giants','2026-12-20','13:00'],
+    ['Colts','Titans','2026-12-20','13:00'],['Dolphins','Packers','2026-12-20','13:00'],
+    ['Saints','Buccaneers','2026-12-20','13:00'],['Bengals','Panthers','2026-12-20','13:00'],
+    ['Falcons','Commanders','2026-12-20','13:00'],['Jets','Cardinals','2026-12-20','16:05'],
+    ['Cowboys','Rams','2026-12-20','16:25'],['Broncos','Raiders','2026-12-20','16:25'],
+    ['Lions','Vikings','2026-12-20','20:20'],['Patriots','Chiefs','2026-12-21','20:15'],
+  ],
+  16: [
+    ['Texans','Eagles','2026-12-24','20:15'],['Packers','Bears','2026-12-25','13:00'],
+    ['Bills','Broncos','2026-12-25','16:30'],['Rams','Seahawks','2026-12-25','20:15'],
+    ['Buccaneers','Falcons','2026-12-27','13:00',true],['Commanders','Vikings','2026-12-27','13:00',true],
+    ['Panthers','Steelers','2026-12-27','13:00',true],['Bengals','Colts','2026-12-27','13:00',true],
+    ['Patriots','Jets','2026-12-27','13:00'],['Browns','Ravens','2026-12-27','13:00'],
+    ['Chargers','Dolphins','2026-12-27','13:00'],['Cardinals','Raiders','2026-12-27','16:05'],
+    ['49ers','Chiefs','2026-12-27','16:25'],['Jaguars','Cowboys','2026-12-27','20:20'],
+    ['Giants','Lions','2026-12-28','20:15'],
+  ],
+  17: [
+    ['Ravens','Bengals','2026-12-31','20:15'],['Rams','Buccaneers','2027-01-03','13:00',true],
+    ['Broncos','Patriots','2027-01-03','13:00',true],['Chiefs','Chargers','2027-01-03','13:00',true],
+    ['Commanders','Jaguars','2027-01-03','13:00',true],['Bills','Dolphins','2027-01-03','13:00'],
+    ['Steelers','Titans','2027-01-03','13:00'],['Vikings','Jets','2027-01-03','13:00'],
+    ['Saints','Falcons','2027-01-03','13:00'],['Seahawks','Panthers','2027-01-03','13:00'],
+    ['Colts','Browns','2027-01-03','13:00'],['Giants','Cowboys','2027-01-03','13:00'],
+    ['Raiders','Cardinals','2027-01-03','16:05'],['Lions','Bears','2027-01-03','16:25'],
+    ['Eagles','49ers','2027-01-03','20:20'],['Texans','Packers','2027-01-04','20:15'],
+  ],
+  18: [
+    ['Jets','Bills','2027-01-10','13:00',true],['Jaguars','Colts','2027-01-10','13:00',true],
+    ['Raiders','Chiefs','2027-01-10','13:00',true],['Titans','Texans','2027-01-10','13:00',true],
+    ['Chargers','Broncos','2027-01-10','13:00',true],['Dolphins','Patriots','2027-01-10','13:00',true],
+    ['Browns','Bengals','2027-01-10','13:00',true],['Steelers','Ravens','2027-01-10','13:00',true],
+    ['Bears','Vikings','2027-01-10','13:00',true],['Lions','Packers','2027-01-10','13:00',true],
+    ['Cowboys','Commanders','2027-01-10','13:00',true],['Buccaneers','Saints','2027-01-10','13:00',true],
+    ['Eagles','Giants','2027-01-10','13:00',true],['Seahawks','Rams','2027-01-10','13:00',true],
+    ['Falcons','Panthers','2027-01-10','13:00',true],['49ers','Cardinals','2027-01-10','13:00',true],
+  ],
+};
+
+function buildSeasonGames(){
+  const out = {};
+  Object.keys(SEASON_SCHEDULE).forEach(week=>{
+    out[week] = SEASON_SCHEDULE[week].map((g,i)=>({
+      id:'w'+week+'g'+(i+1), away:g[0], home:g[1], kickoff: et(g[2],g[3]), winner:null, tbd: !!g[4]
+    }));
+  });
+  return out;
+}
+
+const FIREBASE_URL = 'https://sip-lines-pickem-default-rtdb.firebaseio.com';
+
+// Translates our existing key names (e.g. 'games-week-3', 'picks-week-3-p2') into
+// Firebase Realtime Database paths (e.g. 'games/week3', 'picks/week3/p2'), so the
+// rest of the app didn't need to change when we moved off Claude's built-in storage.
+function toPath(key){
+  let m;
+  if(key === 'players') return 'players';
+  if(key === 'weeks') return 'weeks';
+  if(m = key.match(/^games-week-(\d+)$/)) return 'games/week'+m[1];
+  if(m = key.match(/^picks-week-(\d+)-(.+)$/)) return 'picks/week'+m[1]+'/'+m[2];
+  if(m = key.match(/^picks-week-(\d+)$/)) return 'picks/week'+m[1];
+  return key;
+}
+
+async function storageGet(key){
+  try{
+    const res = await fetch(FIREBASE_URL+'/'+toPath(key)+'.json');
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data===null ? null : data;
+  }catch(e){ return null; }
+}
+async function storageSet(key, val){
+  try{
+    const res = await fetch(FIREBASE_URL+'/'+toPath(key)+'.json', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(val)
+    });
+    return res.ok;
+  }catch(e){ return false; }
+}
+
+async function init(){
+  let players = await storageGet('players', true);
+  if(!players){ players = DEFAULT_PLAYERS; await storageSet('players', players, true); }
+  state.players = players;
+
+  let weeks = await storageGet('weeks', true);
+  if(!weeks){
+    const seasonGames = buildSeasonGames();
+    weeks = Object.keys(seasonGames).map(Number).sort((a,b)=>a-b);
+    await storageSet('weeks', weeks, true);
+    for(const w of weeks){
+      await storageSet('games-week-'+w, seasonGames[w], true);
+      state.games[w] = seasonGames[w];
+    }
+  }
+  state.weeks = weeks.sort((a,b)=>a-b);
+
+  state.activeWeek = await guessCurrentWeek();
+  state.adminWeek = state.activeWeek;
+  await loadWeek(state.activeWeek);
+  state.loaded = true;
+  render();
+}
+
+async function loadWeek(week){
+  if(!state.games[week]){
+    state.games[week] = await storageGet('games-week-'+week) || [];
+  }
+  if(!state.picks[week]){
+    state.picks[week] = await storageGet('picks-week-'+week) || {};
+  }
+}
+
+async function guessCurrentWeek(){
+  const now = Date.now();
+  let current = state.weeks[0];
+  for(const w of state.weeks){
+    if(!state.games[w]) state.games[w] = await storageGet('games-week-'+w, true) || [];
+    const games = state.games[w];
+    if(games.length===0) continue;
+    const minKick = Math.min(...games.map(g=>new Date(g.kickoff).getTime()));
+    if(minKick <= now) current = w; else break;
+  }
+  return current;
+}
+
+async function ensureAllWeeksLoaded(){
+  for(const w of state.weeks){ await loadWeek(w); }
+}
+
+function fmtKickoff(iso){
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {weekday:'short', hour:'numeric', minute:'2-digit'});
+}
+function fmtLockRemaining(iso){
+  const diff = new Date(iso).getTime() - Date.now();
+  if(diff<=0) return null;
+  const mins = Math.floor(diff/60000);
+  const days = Math.floor(mins/1440);
+  const hrs = Math.floor((mins%1440)/60);
+  const m = mins%60;
+  if(days>=1) return days+'d '+hrs+'h';
+  if(hrs>=1) return hrs+'h '+m+'m';
+  return m+'m';
+}
+function isLocked(game){
+  return new Date(game.kickoff).getTime() <= Date.now();
+}
+
+async function setPick(week, playerId, gameId, side){
+  const game = (state.games[week]||[]).find(g=>g.id===gameId);
+  if(!game || isLocked(game)) { render(); return; }
+  if(!state.picks[week]) state.picks[week] = {};
+  if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
+  state.picks[week][playerId][gameId] = side;
+  render();
+  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId], true);
+}
+
+function computeStandings(){
+  const totals = {};
+  state.players.forEach(p=>{ totals[p.id] = {wins:0, losses:0}; });
+  state.weeks.forEach(week=>{
+    const games = state.games[week] || [];
+    const picks = state.picks[week] || {};
+    games.forEach(g=>{
+      if(!g.winner) return;
+      state.players.forEach(p=>{
+        if(!totals[p.id]) totals[p.id] = {wins:0, losses:0};
+        const pick = (picks[p.id]||{})[g.id];
+        if(pick && pick===g.winner) totals[p.id].wins++;
+        else totals[p.id].losses++;
+      });
+    });
+  });
+  return totals;
+}
+
+function render(){
+  const main = document.getElementById('main');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===state.tab));
+  if(!state.loaded){ main.innerHTML = '<div class="empty">Loading…</div>'; return; }
+  if(state.tab==='picks') renderPicks(main);
+  else if(state.tab==='standings') renderStandings(main);
+  else renderAdmin(main);
+}
+
+function weekChipsHtml(activeWeek, prefix){
+  return '<div class="weekrow">' + state.weeks.map(w=>
+    '<button class="weekchip '+(w===activeWeek?'active':'')+'" data-'+prefix+'week="'+w+'">Week '+w+'</button>'
+  ).join('') + '</div>';
+}
+
+function renderPicks(main){
+  if(state.weeks.length===0){ main.innerHTML = '<div class="empty">No weeks set up yet. Add one in Admin.</div>'; return; }
+  const week = state.activeWeek;
+  const games = (state.games[week]||[]).slice().sort((a,b)=> new Date(a.kickoff)-new Date(b.kickoff));
+  const picks = state.picks[week] || {};
+  const player = state.currentPlayerId;
+
+  let html = weekChipsHtml(week, 'pk');
+  html += '<select class="whoami" id="whoami"><option value="">Who are you picking as?</option>' +
+    state.players.map(p=>'<option value="'+p.id+'" '+(p.id===player?'selected':'')+'>'+esc(p.name)+'</option>').join('') +
+    '</select>';
+
+  if(games.length===0){
+    html += '<div class="empty">No games added for this week yet.</div>';
+  } else {
+    games.forEach(g=>{
+      const locked = isLocked(g);
+      const remain = fmtLockRemaining(g.kickoff);
+      const myPick = player ? (picks[player]||{})[g.id] : null;
+      let statusHtml, statusClass;
+      if(g.winner){ statusHtml = 'Final'; statusClass='final'; }
+      else if(locked){ statusHtml = 'Locked'; statusClass='locked'; }
+      else { statusHtml = 'Locks in '+remain; statusClass='open'; }
+
+      html += '<div class="card">';
+      html += '<div class="card-top"><span class="kickoff">'+fmtKickoff(g.kickoff)+(g.tbd?' · time TBD':'')+'</span><span class="status '+statusClass+'">'+statusHtml+'</span></div>';
+      html += '<div class="matchup">';
+      ['away','home'].forEach(side=>{
+        const name = g[side];
+        let cls = 'teambtn';
+        if(myPick===side) cls += ' picked';
+        if(g.winner===side) cls += ' winner';
+        if(locked && !player) cls += ' disabled';
+        if(locked || !player) cls += (locked||!player) ? ' disabled' : '';
+        html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+((locked||!player)?'disabled':'')+'>'
+          + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)+'</button>';
+      });
+      html += '</div>';
+
+      if(locked){
+        const counts = {away:0, home:0};
+        state.players.forEach(p=>{
+          const pk = (picks[p.id]||{})[g.id];
+          if(pk) counts[pk]++;
+        });
+        html += '<div class="subrow"><span>Away picks: '+counts.away+' · Home picks: '+counts.home+'</span>';
+        if(g.winner && player){
+          if(!myPick) html += '<span class="tag nopick">No pick — loss</span>';
+          else if(myPick===g.winner) html += '<span class="tag correct">Correct</span>';
+          else html += '<span class="tag incorrect">Incorrect</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+  }
+  main.innerHTML = html;
+
+  main.querySelector('#whoami').addEventListener('change', e=>{
+    state.currentPlayerId = e.target.value || null;
+    render();
+  });
+  main.querySelectorAll('[data-pkweek]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.activeWeek = parseInt(el.dataset.pkweek); loadWeek(state.activeWeek).then(render); });
+  });
+  main.querySelectorAll('[data-pick]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const [gameId, side] = el.dataset.pick.split('|');
+      if(!state.currentPlayerId) return;
+      setPick(week, state.currentPlayerId, gameId, side);
+    });
+  });
+}
+
+async function renderStandings(main){
+  main.innerHTML = '<div class="empty">Loading…</div>';
+  await ensureAllWeeksLoaded();
+  const totals = computeStandings();
+  const rows = state.players.map(p=>{
+    const t = totals[p.id] || {wins:0, losses:0};
+    const total = t.wins + t.losses;
+    const pct = total>0 ? Math.round((t.wins/total)*100) : 0;
+    return {name:p.name, wins:t.wins, losses:t.losses, pct};
+  }).sort((a,b)=> b.wins-a.wins || a.losses-b.losses || a.name.localeCompare(b.name));
+
+  let html = '<table class="standings"><thead><tr><th class="rank">#</th><th>Player</th><th class="rec">Record</th><th class="pct">Win %</th></tr></thead><tbody>';
+  rows.forEach((r,i)=>{
+    html += '<tr><td class="rank">'+(i+1)+'</td><td class="pname">'+esc(r.name)+'</td><td class="rec">'+r.wins+'-'+r.losses+'</td><td class="pct">'+(r.wins+r.losses>0?r.pct+'%':'—')+'</td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<div class="hint" style="margin-top:14px;">Standings count every graded game across all weeks. A missed pick on a game that has started counts as a loss once the result is entered.</div>';
+  main.innerHTML = html;
+}
+
+function renderAdmin(main){
+  const week = state.adminWeek;
+  let html = '';
+
+  html += '<section class="admin-block"><h2>Players</h2>';
+  html += '<div id="playersList">';
+  state.players.forEach((p,i)=>{
+    html += '<div class="prow"><input type="text" data-pidx="'+i+'" value="'+esc(p.name)+'"><button class="iconbtn" data-delplayer="'+i+'">×</button></div>';
+  });
+  html += '</div>';
+  html += '<div class="btn-row"><button class="btn ghost" id="addPlayer">+ Add player</button><button class="btn" id="savePlayers">Save players</button><span class="saved-msg" id="playersSaved" style="display:none;">Saved</span></div>';
+  html += '</section>';
+
+  html += '<section class="admin-block"><h2>Weeks</h2>';
+  html += '<div class="hint">All 18 weeks are pre-loaded with the real schedule. A few games late in the season (flex slots in weeks 16-18) weren\'t announced yet and aren\'t included — add them here once the matchups are set. Games marked "time TBD" have a placeholder kickoff; update the exact time as it\'s announced.</div>';
+  html += weekChipsHtml(week, 'ad');
+  html += '<div class="prow"><input type="text" id="newWeekNum" placeholder="Week number, e.g. '+(Math.max(0,...state.weeks)+1)+'" style="max-width:160px;"><button class="btn ghost" id="addWeek">+ Add week</button></div>';
+  html += '</section>';
+
+  if(week){
+    const games = state.games[week] || [];
+    html += '<section class="admin-block"><h2>Week '+week+' games</h2>';
+    html += '<div class="hint">Set the winner once a game is final — that grades everyone\'s pick for it.</div>';
+    html += '<div id="gamesList">';
+    games.forEach((g,i)=>{
+      html += '<div class="grow" data-gidx="'+i+'">';
+      html += '<div class="grow-fields">';
+      html += '<input type="text" data-gfield="away" placeholder="Away team" value="'+esc(g.away)+'">';
+      html += '<input type="text" data-gfield="home" placeholder="Home team" value="'+esc(g.home)+'">';
+      html += '<input type="datetime-local" data-gfield="kickoff" value="'+toLocalInputValue(g.kickoff)+'">';
+      html += '</div>';
+      html += '<div class="grow-fields">';
+      html += '<select data-gfield="winner"><option value="">Winner: none yet</option><option value="away" '+(g.winner==='away'?'selected':'')+'>Winner: away ('+esc(g.away||'')+')</option><option value="home" '+(g.winner==='home'?'selected':'')+'>Winner: home ('+esc(g.home||'')+')</option></select>';
+      html += '<button class="iconbtn" data-delgame="'+i+'">Delete</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+    html += '<div class="btn-row"><button class="btn ghost" id="addGame">+ Add game</button><button class="btn" id="saveGames">Save week '+week+'</button><span class="saved-msg" id="gamesSaved" style="display:none;">Saved</span></div>';
+    html += '</section>';
+  }
+
+  main.innerHTML = html;
+
+  main.querySelectorAll('[data-adweek]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.adminWeek = parseInt(el.dataset.adweek); loadWeek(state.adminWeek).then(render); });
+  });
+
+  main.querySelector('#addPlayer').addEventListener('click', ()=>{
+    state.players.push({id:'p'+Date.now()+Math.floor(Math.random()*1000), name:'New player'});
+    render();
+  });
+  main.querySelectorAll('[data-delplayer]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.players.splice(parseInt(el.dataset.delplayer),1);
+      render();
+    });
+  });
+  main.querySelector('#savePlayers').addEventListener('click', async ()=>{
+    main.querySelectorAll('[data-pidx]').forEach(inp=>{
+      state.players[parseInt(inp.dataset.pidx)].name = inp.value.trim() || 'Unnamed';
+    });
+    await storageSet('players', state.players, true);
+    render();
+    const s = document.getElementById('playersSaved'); if(s){ s.style.display='inline'; setTimeout(()=>s.style.display='none', 1500); }
+  });
+
+  main.querySelector('#addWeek').addEventListener('click', async ()=>{
+    const input = document.getElementById('newWeekNum');
+    const n = parseInt(input.value);
+    if(!n || state.weeks.includes(n)) return;
+    state.weeks.push(n);
+    state.weeks.sort((a,b)=>a-b);
+    state.games[n] = [];
+    await storageSet('weeks', state.weeks, true);
+    await storageSet('games-week-'+n, [], true);
+    state.adminWeek = n;
+    render();
+  });
+
+  if(week){
+    main.querySelector('#addGame').addEventListener('click', ()=>{
+      const games = state.games[week];
+      games.push({id:'w'+week+'g'+(Date.now()), away:'', home:'', kickoff:new Date(Date.now()+3600000).toISOString(), winner:null});
+      render();
+    });
+    main.querySelectorAll('[data-delgame]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        state.games[week].splice(parseInt(el.dataset.delgame),1);
+        render();
+      });
+    });
+    main.querySelector('#saveGames').addEventListener('click', async ()=>{
+      const rows = main.querySelectorAll('#gamesList > .grow');
+      const updated = [];
+      rows.forEach(row=>{
+        const away = row.querySelector('[data-gfield=away]').value.trim();
+        const home = row.querySelector('[data-gfield=home]').value.trim();
+        const kickoffLocal = row.querySelector('[data-gfield=kickoff]').value;
+        const winner = row.querySelector('[data-gfield=winner]').value || null;
+        const existing = state.games[week][parseInt(row.dataset.gidx)] || {};
+        updated.push({
+          id: existing.id || ('w'+week+'g'+Date.now()+Math.floor(Math.random()*1000)),
+          away, home,
+          kickoff: kickoffLocal ? new Date(kickoffLocal).toISOString() : existing.kickoff,
+          winner
+        });
+      });
+      state.games[week] = updated;
+      await storageSet('games-week-'+week, updated, true);
+      render();
+      const s = document.getElementById('gamesSaved'); if(s){ s.style.display='inline'; setTimeout(()=>s.style.display='none', 1500); }
+    });
+  }
+}
+
+function toLocalInputValue(iso){
+  const d = new Date(iso);
+  const pad = n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    state.tab = t.dataset.tab;
+    if(state.tab==='admin' && !state.adminWeek) state.adminWeek = state.activeWeek;
+    render();
+  });
+});
+
+setInterval(()=>{ if(state.tab==='picks') render(); }, 30000);
+
+init();
+</script>
+</body>
+</html>
