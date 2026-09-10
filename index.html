@@ -457,6 +457,10 @@ function toPath(key){
   if(key === 'players') return 'players';
   if(key === 'weeks') return 'weeks';
   if(m = key.match(/^games-week-(\d+)$/)) return 'games/week'+m[1];
+  // Single field within one player's picks for a week (e.g. one game's pick, or their
+  // lock flag) -- checked before the whole-player pattern below so a write here only
+  // ever touches that one field and can never clobber a sibling.
+  if(m = key.match(/^picks-week-(\d+)-([^-]+)-(.+)$/)) return 'picks/week'+m[1]+'/'+m[2]+'/'+m[3];
   if(m = key.match(/^picks-week-(\d+)-(.+)$/)) return 'picks/week'+m[1]+'/'+m[2];
   if(m = key.match(/^picks-week-(\d+)$/)) return 'picks/week'+m[1];
   return key;
@@ -651,7 +655,8 @@ async function setPick(week, playerId, gameId, side){
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
   state.picks[week][playerId][gameId] = side;
   render();
-  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId]);
+  const ok = await storageSet('picks-week-'+week+'-'+playerId+'-'+gameId, side);
+  if(!ok) flashBanner('Pick didn\'t save — check your connection and tap it again', true);
 }
 
 async function setLock(week, playerId, locked){
@@ -659,7 +664,28 @@ async function setLock(week, playerId, locked){
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
   state.picks[week][playerId]._locked = locked;
   render();
-  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId]);
+  const ok = await storageSet('picks-week-'+week+'-'+playerId+'-_locked', locked);
+  if(!ok) flashBanner('Lock didn\'t save — check your connection and try again', true);
+}
+
+// Small fixed banner for surfacing a failed save -- otherwise a dropped write happens
+// silently and just looks like the pick was never made.
+function flashBanner(msg, isError){
+  let el = document.getElementById('flashBanner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'flashBanner';
+    el.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:50;'
+      +'max-width:90%;padding:11px 18px;border-radius:6px;font-family:var(--f-condensed);'
+      +'font-size:13px;font-weight:600;letter-spacing:0.03em;color:#fff;'
+      +'box-shadow:0 4px 16px rgba(0,0,0,0.45);transition:opacity 0.2s;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = isError ? 'var(--accent)' : 'var(--win)';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity='0'; }, 4000);
 }
 
 function computeStandings(){
