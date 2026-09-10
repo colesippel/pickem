@@ -645,7 +645,8 @@ function isLocked(game){
 async function setPick(week, playerId, gameId, side){
   const game = (state.games[week]||[]).find(g=>g.id===gameId);
   const myPicks = (state.picks[week]||{})[playerId];
-  if(!game || isLocked(game) || (myPicks && myPicks._locked)) { render(); return; }
+  const isLockedForPlayer = !(myPicks && myPicks._locked === false);
+  if(!game || isLocked(game) || isLockedForPlayer) { render(); return; }
   if(!state.picks[week]) state.picks[week] = {};
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
   state.picks[week][playerId][gameId] = side;
@@ -701,7 +702,10 @@ function renderPicks(main){
   const games = (state.games[week]||[]).slice().sort((a,b)=> new Date(a.kickoff)-new Date(b.kickoff));
   const picks = state.picks[week] || {};
   const player = state.currentPlayerId;
-  const playerLocked = !!(player && picks[player] && picks[player]._locked);
+  const myRecord = player ? picks[player] : null;
+  // Default to locked for every week unless this player has explicitly unlocked it --
+  // so each new week starts locked and they have to consciously flip it open.
+  const playerLocked = player ? (myRecord && myRecord._locked === false ? false : true) : false;
 
   let html = weekChipsHtml(week, 'pk');
   html += '<select class="whoami" id="whoami"><option value="">Who are you picking as?</option>' +
