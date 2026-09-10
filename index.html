@@ -81,6 +81,28 @@
     -webkit-appearance:none;appearance:none;
   }
 
+  .lockrow{
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:12px 14px;margin:0 0 16px 0;
+  }
+  .locklabel{
+    font-family:var(--f-condensed);font-size:13px;font-weight:600;letter-spacing:0.03em;
+    text-transform:uppercase;color:var(--text);
+  }
+  .switch{position:relative;display:inline-block;width:46px;height:26px;flex:0 0 auto;}
+  .switch input{opacity:0;width:0;height:0;}
+  .sliderctl{
+    position:absolute;cursor:pointer;inset:0;background:var(--surface2);
+    border:1px solid var(--border);border-radius:14px;transition:0.15s;
+  }
+  .sliderctl::before{
+    content:'';position:absolute;height:18px;width:18px;left:3px;top:3px;
+    background:var(--text-dim);border-radius:50%;transition:0.15s;
+  }
+  .switch input:checked + .sliderctl{background:var(--accent);border-color:var(--accent);}
+  .switch input:checked + .sliderctl::before{transform:translateX(20px);background:#fff;}
+
   .card{
     background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--border);
     border-radius:4px;padding:14px;margin-bottom:12px;
@@ -622,12 +644,21 @@ function isLocked(game){
 
 async function setPick(week, playerId, gameId, side){
   const game = (state.games[week]||[]).find(g=>g.id===gameId);
-  if(!game || isLocked(game)) { render(); return; }
+  const myPicks = (state.picks[week]||{})[playerId];
+  if(!game || isLocked(game) || (myPicks && myPicks._locked)) { render(); return; }
   if(!state.picks[week]) state.picks[week] = {};
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
   state.picks[week][playerId][gameId] = side;
   render();
-  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId], true);
+  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId]);
+}
+
+async function setLock(week, playerId, locked){
+  if(!state.picks[week]) state.picks[week] = {};
+  if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
+  state.picks[week][playerId]._locked = locked;
+  render();
+  await storageSet('picks-week-'+week+'-'+playerId, state.picks[week][playerId]);
 }
 
 function computeStandings(){
@@ -670,25 +701,32 @@ function renderPicks(main){
   const games = (state.games[week]||[]).slice().sort((a,b)=> new Date(a.kickoff)-new Date(b.kickoff));
   const picks = state.picks[week] || {};
   const player = state.currentPlayerId;
+  const playerLocked = !!(player && picks[player] && picks[player]._locked);
 
   let html = weekChipsHtml(week, 'pk');
   html += '<select class="whoami" id="whoami"><option value="">Who are you picking as?</option>' +
     state.players.map(p=>'<option value="'+p.id+'" '+(p.id===player?'selected':'')+'>'+esc(p.name)+'</option>').join('') +
     '</select>';
 
+  if(player){
+    html += '<div class="lockrow"><span class="locklabel">'+(playerLocked?'Picks locked':'Editing enabled')+'</span>'
+      + '<label class="switch"><input type="checkbox" id="lockToggle" '+(playerLocked?'checked':'')+'><span class="sliderctl"></span></label></div>';
+  }
+
   if(games.length===0){
     html += '<div class="empty">No games added for this week yet.</div>';
   } else {
     games.forEach(g=>{
-      const locked = isLocked(g);
+      const kickLocked = isLocked(g);
+      const disabled = kickLocked || !player || playerLocked;
       const remain = fmtLockRemaining(g.kickoff);
       const myPick = player ? (picks[player]||{})[g.id] : null;
       let statusHtml, statusClass;
       if(g.winner){ statusHtml = 'Final'; statusClass='final'; }
-      else if(locked){ statusHtml = 'Locked'; statusClass='locked'; }
+      else if(kickLocked){ statusHtml = 'Locked'; statusClass='locked'; }
       else { statusHtml = 'Locks in '+remain; statusClass='open'; }
 
-      html += '<div class="card card-'+(g.winner?'final':(locked?'locked':'open'))+'">';
+      html += '<div class="card card-'+(g.winner?'final':(kickLocked?'locked':'open'))+'">';
       html += '<div class="card-top"><span class="kickoff">'+fmtKickoff(g.kickoff)+(g.tbd?' · time TBD':'')+'</span><span class="status '+statusClass+'">'+statusHtml+'</span></div>';
       html += '<div class="matchup">';
       ['away','home'].forEach(side=>{
@@ -696,16 +734,15 @@ function renderPicks(main){
         let cls = 'teambtn';
         if(myPick===side) cls += ' picked';
         if(g.winner===side) cls += ' winner';
-        if(locked && !player) cls += ' disabled';
-        if(locked || !player) cls += (locked||!player) ? ' disabled' : '';
-        html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+((locked||!player)?'disabled':'')+'>'
+        if(disabled) cls += ' disabled';
+        html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+(disabled?'disabled':'')+'>'
           + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)
           + (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : '')
           + '</button>';
       });
       html += '</div>';
 
-      if(locked){
+      if(kickLocked){
         const counts = {away:0, home:0};
         state.players.forEach(p=>{
           const pk = (picks[p.id]||{})[g.id];
@@ -728,6 +765,10 @@ function renderPicks(main){
     state.currentPlayerId = e.target.value || null;
     render();
   });
+  const lockToggle = main.querySelector('#lockToggle');
+  if(lockToggle){
+    lockToggle.addEventListener('change', e=>{ setLock(week, player, e.target.checked); });
+  }
   main.querySelectorAll('[data-pkweek]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.activeWeek = parseInt(el.dataset.pkweek); loadWeek(state.activeWeek).then(render); });
   });
