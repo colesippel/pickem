@@ -133,6 +133,10 @@
     background:rgba(135,146,172,0.14);padding:2px 8px;border-radius:2px;margin-bottom:6px;
   }
   .teambtn .teamlogo{display:block;width:32px;height:32px;object-fit:contain;margin:0 auto 6px auto;}
+  .teambtn .teamrecord{
+    display:block;font-family:var(--f-condensed);font-size:10px;font-weight:500;
+    color:var(--text-dim);margin-top:2px;letter-spacing:0.02em;
+  }
   .teambtn .spreadline{
     display:block;font-family:var(--f-condensed);font-size:11px;font-weight:600;
     color:var(--text-dim);margin-top:5px;letter-spacing:0.02em;
@@ -140,6 +144,11 @@
   .teambtn.picked{border-color:var(--gold);background:rgba(201,162,39,0.14);}
   .teambtn.picked .at{background:rgba(201,162,39,0.25);color:var(--gold);}
   .teambtn.winner{border-color:var(--win);background:rgba(46,139,87,0.16);}
+  .teambtn .scoreline{
+    display:block;font-family:var(--f-display);font-size:18px;color:var(--text-dim);
+    margin-top:5px;letter-spacing:0.01em;
+  }
+  .teambtn.winner .scoreline{color:var(--win);}
   .teambtn.disabled{opacity:0.5;cursor:default;}
 
   .progressrow{
@@ -566,6 +575,13 @@ async function syncWeekFromEspn(week){
     const g = games.find(g=> g.home===home.team.shortDisplayName && g.away===away.team.shortDisplayName);
     if(!g) return;
 
+    const homeRec = home.records && home.records.find(r=>r.name==='overall');
+    const awayRec = away.records && away.records.find(r=>r.name==='overall');
+    if(homeRec && awayRec && (!g.records || g.records.home!==homeRec.summary || g.records.away!==awayRec.summary)){
+      g.records = {home:homeRec.summary, away:awayRec.summary};
+      changed = true;
+    }
+
     const oddsEntry = comp.odds && comp.odds[0];
     const ps = oddsEntry && oddsEntry.pointSpread;
     const homeLine = ps && ps.home && ps.home.close && ps.home.close.line;
@@ -584,11 +600,17 @@ async function syncWeekFromEspn(week){
     if(status && status.completed){
       const homeScore = parseInt(home.score, 10);
       const awayScore = parseInt(away.score, 10);
-      if(!isNaN(homeScore) && !isNaN(awayScore) && homeScore!==awayScore){
-        const winnerSide = homeScore>awayScore ? 'home' : 'away';
-        if(g.winner !== winnerSide){
-          g.winner = winnerSide;
+      if(!isNaN(homeScore) && !isNaN(awayScore)){
+        if(!g.score || g.score.home!==homeScore || g.score.away!==awayScore){
+          g.score = {home:homeScore, away:awayScore};
           changed = true;
+        }
+        if(homeScore !== awayScore){
+          const winnerSide = homeScore>awayScore ? 'home' : 'away';
+          if(g.winner !== winnerSide){
+            g.winner = winnerSide;
+            changed = true;
+          }
         }
       }
     }
@@ -881,7 +903,8 @@ function renderPicks(main){
         html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+(disabled?'disabled':'')+'>'
           + (logo ? '<img class="teamlogo" src="'+logo+'" alt="" loading="lazy">' : '')
           + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)
-          + (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : '')
+          + (g.records ? '<span class="teamrecord">'+esc(g.records[side])+'</span>' : '')
+          + (g.score ? '<span class="scoreline">'+g.score[side]+'</span>' : (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : ''))
           + '</button>';
       });
       html += '</div>';
