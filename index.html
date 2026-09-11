@@ -132,6 +132,7 @@
     letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim);
     background:rgba(135,146,172,0.14);padding:2px 8px;border-radius:2px;margin-bottom:6px;
   }
+  .teambtn .teamlogo{display:block;width:32px;height:32px;object-fit:contain;margin:0 auto 6px auto;}
   .teambtn .spreadline{
     display:block;font-family:var(--f-condensed);font-size:11px;font-weight:600;
     color:var(--text-dim);margin-top:5px;letter-spacing:0.02em;
@@ -140,6 +141,22 @@
   .teambtn.picked .at{background:rgba(201,162,39,0.25);color:var(--gold);}
   .teambtn.winner{border-color:var(--win);background:rgba(46,139,87,0.16);}
   .teambtn.disabled{opacity:0.5;cursor:default;}
+
+  .progressrow{
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:12px 14px;margin-bottom:16px;
+  }
+  .progresshead{
+    font-family:var(--f-condensed);font-size:12px;font-weight:600;letter-spacing:0.03em;
+    text-transform:uppercase;color:var(--text-dim);margin-bottom:9px;
+  }
+  .progresschips{display:flex;flex-wrap:wrap;gap:6px;}
+  .progresschip{
+    font-family:var(--f-condensed);font-size:11px;font-weight:600;letter-spacing:0.02em;
+    padding:4px 9px;border-radius:3px;border:1px solid var(--border);color:var(--text-dim);
+  }
+  .progresschip.partial{border-color:var(--gold);color:var(--gold);}
+  .progresschip.done{background:rgba(46,139,87,0.18);border-color:var(--win);color:var(--win);}
 
   .subrow{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;gap:6px;}
   .tag{
@@ -437,6 +454,22 @@ const SEASON_SCHEDULE = {
   ],
 };
 
+// Maps the team nicknames used throughout this app to ESPN's CDN abbreviation, so we
+// can link straight to their logo art without an extra API round trip.
+const TEAM_ABBR = {
+  Cardinals:'ari', Falcons:'atl', Ravens:'bal', Bills:'buf', Panthers:'car',
+  Bears:'chi', Bengals:'cin', Browns:'cle', Cowboys:'dal', Broncos:'den',
+  Lions:'det', Packers:'gb', Texans:'hou', Colts:'ind', Jaguars:'jax',
+  Chiefs:'kc', Raiders:'lv', Chargers:'lac', Rams:'lar', Dolphins:'mia',
+  Vikings:'min', Patriots:'ne', Saints:'no', Giants:'nyg', Jets:'nyj',
+  Eagles:'phi', Steelers:'pit', '49ers':'sf', Seahawks:'sea', Buccaneers:'tb',
+  Titans:'ten', Commanders:'wsh'
+};
+function teamLogoUrl(name){
+  const abbr = TEAM_ABBR[name];
+  return abbr ? 'https://a.espncdn.com/i/teamlogos/nfl/500/'+abbr+'.png' : null;
+}
+
 function buildSeasonGames(){
   const out = {};
   Object.keys(SEASON_SCHEDULE).forEach(week=>{
@@ -485,11 +518,19 @@ async function storageSet(key, val){
   }catch(e){ return false; }
 }
 
+// Weeks 1-18 are the regular season (ESPN seasontype=2, week numbers 1-18 directly).
+// Weeks 19-22 are our postseason slots (Wild Card, Divisional, Conference, Super Bowl),
+// which ESPN addresses as seasontype=3 with its own week numbering 1-4.
+function espnParamsForWeek(week){
+  return week <= 18 ? {seasontype:2, apiWeek:week} : {seasontype:3, apiWeek:week-18};
+}
+
 // Pulls final scores for one week from ESPN's public scoreboard feed and fills in any
 // game winner that isn't set yet. Matches games by team nickname (e.g. "Chiefs"), which
 // is how ESPN's shortDisplayName lines up with the names used throughout this app.
 async function fetchEspnScoreboard(week){
-  const target = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week='+week;
+  const {seasontype, apiWeek} = espnParamsForWeek(week);
+  const target = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype='+seasontype+'&week='+apiWeek;
   // Try fetching ESPN directly first.
   try{
     const res = await fetch(target);
@@ -533,6 +574,11 @@ async function syncWeekFromEspn(week){
       g.spread = {home:homeLine, away:awayLine};
       changed = true;
     }
+    const total = oddsEntry && oddsEntry.overUnder;
+    if(total && g.total !== total){
+      g.total = total;
+      changed = true;
+    }
 
     const status = comp.status && comp.status.type;
     if(status && status.completed){
@@ -557,6 +603,34 @@ async function syncWeekFromEspn(week){
 // Keeps the currently-viewed week's spreads current, and grades any started-but-
 // ungraded game in any week. Safe to call often -- reads are cheap and writes only
 // happen when something actually changed.
+// Pulls the actual matchups for a postseason round (teams + kickoff time) from ESPN,
+// once that round's bracket has been set. Returns false with a banner message if
+// ESPN doesn't have anything yet (e.g. the previous round hasn't finished).
+async function pullPlayoffMatchups(week){
+  const data = await fetchEspnScoreboard(week);
+  if(!data || !data.events || data.events.length===0){
+    flashBanner('No matchups from ESPN yet — check back once the bracket is set', true);
+    return false;
+  }
+  const games = data.events.map((ev, i)=>{
+    const comp = ev.competitions && ev.competitions[0];
+    const home = comp.competitors.find(c=>c.homeAway==='home');
+    const away = comp.competitors.find(c=>c.homeAway==='away');
+    return {
+      id: 'w'+week+'g'+(i+1),
+      away: away.team.shortDisplayName,
+      home: home.team.shortDisplayName,
+      kickoff: ev.date,
+      winner: null,
+      tbd: false
+    };
+  });
+  state.games[week] = games;
+  await storageSet('games-week-'+week, games);
+  flashBanner(games.length+' matchup'+(games.length===1?'':'s')+' pulled in', false);
+  return true;
+}
+
 async function syncStaleAndActiveWeeks(){
   const now = Date.now();
   let anyChanged = false;
@@ -586,10 +660,27 @@ async function init(){
   if(!weeks){
     const seasonGames = buildSeasonGames();
     weeks = Object.keys(seasonGames).map(Number).sort((a,b)=>a-b);
+    weeks = weeks.concat([19,20,21,22]);
     await storageSet('weeks', weeks, true);
-    for(const w of weeks){
+    for(const w of Object.keys(seasonGames)){
       await storageSet('games-week-'+w, seasonGames[w], true);
       state.games[w] = seasonGames[w];
+    }
+    for(const w of [19,20,21,22]){
+      await storageSet('games-week-'+w, [], true);
+      state.games[w] = [];
+    }
+  } else {
+    // Migration for pools created before the postseason weeks existed -- add them
+    // without touching anything already stored.
+    const missing = [19,20,21,22].filter(w=>!weeks.includes(w));
+    if(missing.length){
+      weeks = weeks.concat(missing);
+      await storageSet('weeks', weeks);
+      for(const w of missing){
+        await storageSet('games-week-'+w, []);
+        state.games[w] = [];
+      }
     }
   }
   state.weeks = weeks.sort((a,b)=>a-b);
@@ -716,9 +807,14 @@ function render(){
   else renderAdmin(main);
 }
 
+const POSTSEASON_LABELS = {19:'Wild Card', 20:'Divisional', 21:'Conf. Champ.', 22:'Super Bowl'};
+function weekLabel(week){
+  return POSTSEASON_LABELS[week] || ('Week '+week);
+}
+
 function weekChipsHtml(activeWeek, prefix){
   return '<div class="weekrow">' + state.weeks.map(w=>
-    '<button class="weekchip '+(w===activeWeek?'active':'')+'" data-'+prefix+'week="'+w+'">Week '+w+'</button>'
+    '<button class="weekchip '+(w===activeWeek?'active':'')+'" data-'+prefix+'week="'+w+'">'+weekLabel(w)+'</button>'
   ).join('') + '</div>';
 }
 
@@ -734,6 +830,22 @@ function renderPicks(main){
   const playerLocked = player ? (myRecord && myRecord._locked === false ? false : true) : false;
 
   let html = weekChipsHtml(week, 'pk');
+
+  if(games.length>0){
+    const progress = state.players.map(p=>{
+      const rec = picks[p.id] || {};
+      const count = games.filter(g=> rec[g.id]).length;
+      return {name:p.name, count, total:games.length};
+    });
+    const doneCount = progress.filter(p=>p.count===p.total).length;
+    html += '<div class="progressrow"><div class="progresshead">'+doneCount+' of '+state.players.length+' have all picks in</div><div class="progresschips">'
+      + progress.map(p=>{
+          const st = p.count===p.total ? 'done' : (p.count>0 ? 'partial' : 'none');
+          return '<span class="progresschip '+st+'">'+esc(p.name)+' '+p.count+'/'+p.total+'</span>';
+        }).join('')
+      + '</div></div>';
+  }
+
   html += '<select class="whoami" id="whoami"><option value="">Who are you picking as?</option>' +
     state.players.map(p=>'<option value="'+p.id+'" '+(p.id===player?'selected':'')+'>'+esc(p.name)+'</option>').join('') +
     '</select>';
@@ -757,15 +869,17 @@ function renderPicks(main){
       else { statusHtml = 'Locks in '+remain; statusClass='open'; }
 
       html += '<div class="card card-'+(g.winner?'final':(kickLocked?'locked':'open'))+'">';
-      html += '<div class="card-top"><span class="kickoff">'+fmtKickoff(g.kickoff)+(g.tbd?' · time TBD':'')+'</span><span class="status '+statusClass+'">'+statusHtml+'</span></div>';
+      html += '<div class="card-top"><span class="kickoff">'+fmtKickoff(g.kickoff)+(g.tbd?' · time TBD':'')+(g.total?' · O/U '+esc(g.total):'')+'</span><span class="status '+statusClass+'">'+statusHtml+'</span></div>';
       html += '<div class="matchup">';
       ['away','home'].forEach(side=>{
         const name = g[side];
+        const logo = teamLogoUrl(name);
         let cls = 'teambtn';
         if(myPick===side) cls += ' picked';
         if(g.winner===side) cls += ' winner';
         if(disabled) cls += ' disabled';
         html += '<button class="'+cls+'" data-pick="'+g.id+'|'+side+'" '+(disabled?'disabled':'')+'>'
+          + (logo ? '<img class="teamlogo" src="'+logo+'" alt="" loading="lazy">' : '')
           + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)
           + (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : '')
           + '</button>';
@@ -852,7 +966,11 @@ function renderAdmin(main){
 
   if(week){
     const games = state.games[week] || [];
-    html += '<section class="admin-block"><h2>Week '+week+' games</h2>';
+    html += '<section class="admin-block"><h2>'+weekLabel(week)+' games</h2>';
+    if(week >= 19 && games.length===0){
+      html += '<div class="hint">Matchups aren\'t set until the previous round wraps up. Try pulling from ESPN once the bracket updates, or add the games yourself below.</div>';
+      html += '<div class="btn-row" style="margin-bottom:14px;"><button class="btn" id="pullPlayoff">Pull matchups from ESPN</button></div>';
+    }
     html += '<div class="hint">Point spreads and winners fill in automatically — spreads update as the line moves, and winners fill in a few minutes after each game goes final. No need to enter either by hand.</div>';
     html += '<div class="btn-row" style="margin-bottom:14px;"><button class="btn ghost" id="checkScoresNow">Check spreads &amp; scores now</button><span class="saved-msg" id="scoresChecked" style="display:none;">Updated</span></div>';
     html += '<div id="gamesList">';
@@ -869,7 +987,7 @@ function renderAdmin(main){
       html += '</div></div>';
     });
     html += '</div>';
-    html += '<div class="btn-row"><button class="btn ghost" id="addGame">+ Add game</button><button class="btn" id="saveGames">Save week '+week+'</button><span class="saved-msg" id="gamesSaved" style="display:none;">Saved</span></div>';
+    html += '<div class="btn-row"><button class="btn ghost" id="addGame">+ Add game</button><button class="btn" id="saveGames">Save '+weekLabel(week)+'</button><span class="saved-msg" id="gamesSaved" style="display:none;">Saved</span></div>';
     html += '</section>';
   }
 
@@ -912,6 +1030,15 @@ function renderAdmin(main){
   });
 
   if(week){
+    const pullBtn = main.querySelector('#pullPlayoff');
+    if(pullBtn){
+      pullBtn.addEventListener('click', async (e)=>{
+        e.target.disabled = true;
+        e.target.textContent = 'Pulling…';
+        await pullPlayoffMatchups(week);
+        render();
+      });
+    }
     main.querySelector('#checkScoresNow').addEventListener('click', async (e)=>{
       e.target.disabled = true;
       e.target.textContent = 'Checking…';
