@@ -766,9 +766,15 @@ async function setPick(week, playerId, gameId, side){
   if(!game || isLocked(game) || isLockedForPlayer) { render(); return; }
   if(!state.picks[week]) state.picks[week] = {};
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
-  state.picks[week][playerId][gameId] = side;
+  const current = state.picks[week][playerId][gameId];
+  const clearing = current === side;
+  if(clearing){
+    delete state.picks[week][playerId][gameId];
+  } else {
+    state.picks[week][playerId][gameId] = side;
+  }
   render();
-  const ok = await storageSet('picks-week-'+week+'-'+playerId+'-'+gameId, side);
+  const ok = await storageSet('picks-week-'+week+'-'+playerId+'-'+gameId, clearing ? null : side);
   if(!ok) flashBanner('Pick didn\'t save — check your connection and tap it again', true);
 }
 
@@ -937,7 +943,13 @@ function renderPicks(main){
     lockToggle.addEventListener('change', e=>{ setLock(week, player, e.target.checked); });
   }
   main.querySelectorAll('[data-pkweek]').forEach(el=>{
-    el.addEventListener('click', ()=>{ state.activeWeek = parseInt(el.dataset.pkweek); loadWeek(state.activeWeek).then(render); });
+    el.addEventListener('click', ()=>{
+      state.activeWeek = parseInt(el.dataset.pkweek);
+      loadWeek(state.activeWeek).then(()=>{
+        render();
+        syncWeekFromEspn(state.activeWeek).then(changed=>{ if(changed) render(); });
+      });
+    });
   });
   main.querySelectorAll('[data-pick]').forEach(el=>{
     el.addEventListener('click', ()=>{
