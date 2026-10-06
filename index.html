@@ -170,6 +170,22 @@
   .progresschip.done{background:rgba(46,139,87,0.18);border-color:var(--win);color:var(--win);}
 
   .subrow{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;gap:6px;}
+  .whobtn{
+    background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;
+    font-family:var(--f-condensed);font-size:11px;font-weight:600;letter-spacing:0.04em;
+    text-transform:uppercase;padding:3px 9px;border-radius:3px;
+  }
+  .whopicked{
+    margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:4px;
+  }
+  .whorow{display:flex;gap:10px;padding:4px 0;font-size:13px;line-height:1.35;}
+  .whoteam{
+    flex:0 0 96px;font-family:var(--f-condensed);font-weight:600;letter-spacing:0.02em;
+    text-transform:uppercase;color:var(--text-dim);font-size:12px;padding-top:1px;
+  }
+  .whonames{flex:1;color:var(--text);}
+  .whorow.won .whoteam,.whorow.won .whonames{color:var(--win);}
+  .whorow.nopickrow .whonames{color:var(--text-dim);}
   .tag{
     font-family:var(--f-condensed);padding:3px 10px;font-weight:700;font-size:11px;
     letter-spacing:0.04em;text-transform:uppercase;
@@ -198,6 +214,19 @@
   .rec{text-align:right;font-family:var(--f-display);font-size:17px;color:var(--text);font-variant-numeric:tabular-nums;}
   .pct{text-align:right;color:var(--text-dim);font-size:12px;font-family:var(--f-condensed);}
 
+  .modetoggle{display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+  .modebtn{
+    flex:1;padding:10px 4px;background:var(--surface);color:var(--text-dim);border:none;cursor:pointer;
+    font-family:var(--f-condensed);font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;
+  }
+  .modebtn.active{background:var(--accent);color:#fff;}
+  .pingate{max-width:280px;margin:40px auto;text-align:center;}
+  .pintitle{font-family:var(--f-display);font-size:24px;text-transform:uppercase;margin-bottom:6px;}
+  .pingate input{
+    width:100%;padding:14px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);
+    color:var(--text);font-size:24px;letter-spacing:0.5em;text-align:center;margin-bottom:8px;
+  }
+  .pinerr{min-height:20px;color:var(--loss);font-family:var(--f-condensed);font-size:13px;font-weight:600;margin-bottom:8px;}
   section.admin-block{margin-bottom:24px;}
   section.admin-block h2{
     font-family:var(--f-condensed);font-size:14px;font-weight:700;letter-spacing:0.04em;
@@ -264,10 +293,13 @@ const state = {
   games: {},
   picks: {},
   activeWeek: null,
-  standingsWeek: 'all',
+  standingsMode: 'season',
+  standingsWeek: null,
+  adminUnlocked: false,
   adminWeek: null,
   tab: 'picks',
   currentPlayerId: null,
+  openPickLists: {},
   loaded: false,
 };
 
@@ -810,10 +842,11 @@ function flashBanner(msg, isError){
   el._t = setTimeout(()=>{ el.style.opacity='0'; }, 4000);
 }
 
-function computeStandings(){
+function computeStandings(onlyWeek){
   const totals = {};
   state.players.forEach(p=>{ totals[p.id] = {wins:0, losses:0}; });
   state.weeks.forEach(week=>{
+    if(onlyWeek != null && week !== onlyWeek) return;
     const games = state.games[week] || [];
     const picks = state.picks[week] || {};
     games.forEach(g=>{
@@ -835,6 +868,7 @@ function render(){
   if(!state.loaded){ main.innerHTML = '<div class="empty">Loading…</div>'; return; }
   if(state.tab==='picks') renderPicks(main);
   else if(state.tab==='standings') renderStandings(main);
+  else if(!state.adminUnlocked) renderAdminGate(main);
   else renderAdmin(main);
 }
 
@@ -919,18 +953,30 @@ function renderPicks(main){
       html += '</div>';
 
       if(kickLocked){
-        const counts = {away:0, home:0};
+        const who = {away:[], home:[], none:[]};
         state.players.forEach(p=>{
           const pk = (picks[p.id]||{})[g.id];
-          if(pk) counts[pk]++;
+          if(pk==='away' || pk==='home') who[pk].push(p.name);
+          else who.none.push(p.name);
         });
-        html += '<div class="subrow"><span>Away picks: '+counts.away+' · Home picks: '+counts.home+'</span>';
+        const isOpen = !!state.openPickLists[g.id];
+        html += '<div class="subrow"><span>'+esc(g.away)+' '+who.away.length+' · '+esc(g.home)+' '+who.home.length+'</span>'
+          + '<button class="whobtn" data-togglepicks="'+g.id+'">Who picked '+(isOpen?'▴':'▾')+'</button>';
         if(g.winner && player){
           if(!myPick) html += '<span class="tag nopick">No pick — loss</span>';
           else if(myPick===g.winner) html += '<span class="tag correct">Correct</span>';
           else html += '<span class="tag incorrect">Incorrect</span>';
         }
         html += '</div>';
+        if(isOpen){
+          const rowFor = (label, names, cls)=>
+            '<div class="whorow '+cls+'"><span class="whoteam">'+esc(label)+'</span><span class="whonames">'+(names.length?names.map(esc).join(', '):'—')+'</span></div>';
+          html += '<div class="whopicked">'
+            + rowFor(g.away, who.away, g.winner==='away'?'won':'')
+            + rowFor(g.home, who.home, g.winner==='home'?'won':'')
+            + (who.none.length ? rowFor('No pick', who.none, 'nopickrow') : '')
+            + '</div>';
+        }
       }
       html += '</div>';
     });
@@ -954,6 +1000,13 @@ function renderPicks(main){
       });
     });
   });
+  main.querySelectorAll('[data-togglepicks]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.togglepicks;
+      state.openPickLists[id] = !state.openPickLists[id];
+      render();
+    });
+  });
   main.querySelectorAll('[data-pick]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const [gameId, side] = el.dataset.pick.split('|');
@@ -966,26 +1019,101 @@ function renderPicks(main){
 async function renderStandings(main){
   main.innerHTML = '<div class="empty">Loading…</div>';
   await ensureAllWeeksLoaded();
-  const totals = computeStandings();
+  const weekMode = state.standingsMode === 'week';
+  if(weekMode && (state.standingsWeek == null || !state.weeks.includes(state.standingsWeek))){
+    state.standingsWeek = state.activeWeek || state.weeks[0];
+  }
+  const totals = computeStandings(weekMode ? state.standingsWeek : null);
   const rows = state.players.map(p=>{
     const t = totals[p.id] || {wins:0, losses:0};
     const total = t.wins + t.losses;
     const pct = total>0 ? Math.round((t.wins/total)*100) : 0;
     return {name:p.name, wins:t.wins, losses:t.losses, pct};
   }).sort((a,b)=> b.wins-a.wins || a.losses-b.losses || a.name.localeCompare(b.name));
+  const anyGraded = rows.some(r=>r.wins+r.losses>0);
 
-  let html = '<table class="standings"><thead><tr><th class="rank">#</th><th>Player</th><th class="rec">Record</th><th class="pct">Win %</th></tr></thead><tbody>';
+  let html = '<div class="modetoggle">'
+    + '<button class="modebtn '+(weekMode?'':'active')+'" data-stmode="season">Season</button>'
+    + '<button class="modebtn '+(weekMode?'active':'')+'" data-stmode="week">By week</button></div>';
+  if(weekMode) html += weekChipsHtml(state.standingsWeek, 'st');
+
+  html += '<table class="standings"><thead><tr><th class="rank">#</th><th>Player</th><th class="rec">Record</th><th class="pct">Win %</th></tr></thead><tbody>';
   rows.forEach((r,i)=>{
     html += '<tr><td class="rank">'+(i+1)+'</td><td class="pname">'+esc(r.name)+'</td><td class="rec">'+r.wins+'-'+r.losses+'</td><td class="pct">'+(r.wins+r.losses>0?r.pct+'%':'—')+'</td></tr>';
   });
   html += '</tbody></table>';
-  html += '<div class="hint" style="margin-top:14px;">Standings count every graded game across all weeks. A missed pick on a game that has started counts as a loss once the result is entered.</div>';
+  if(weekMode && !anyGraded){
+    html += '<div class="hint" style="margin-top:14px;">No games from '+weekLabel(state.standingsWeek)+' have been graded yet.</div>';
+  } else {
+    html += '<div class="hint" style="margin-top:14px;">'+(weekMode ? 'Showing '+weekLabel(state.standingsWeek)+' only. ' : 'Season standings count every graded game across all weeks. ')+'A missed pick on a game that has started counts as a loss once the game is final.</div>';
+  }
   main.innerHTML = html;
+
+  main.querySelectorAll('[data-stmode]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.standingsMode = el.dataset.stmode; render(); });
+  });
+  main.querySelectorAll('[data-stweek]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.standingsWeek = parseInt(el.dataset.stweek); render(); });
+  });
+}
+
+// ---- Admin PIN gate. Client-side only: it keeps casual taps out of the Admin screen,
+// it is not real security. The PIN is stored as a salted hash, not in plain text.
+const ADMIN_PIN_HASH = '02300bbb51ae03ac5bbc742af2e6329bf7027ecc16eb6dce353399ee54a666c2';
+async function hashPin(pin){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('sip-linds:'+pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function renderAdminGate(main){
+  main.innerHTML = '<div class="pingate"><div class="pintitle">Admin</div>'
+    + '<div class="hint" style="margin:0 0 14px 0;">Enter the commissioner PIN to continue.</div>'
+    + '<input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="pinInput" autocomplete="off" placeholder="••••">'
+    + '<div class="pinerr" id="pinErr"></div>'
+    + '<button class="btn" id="pinGo">Unlock</button></div>';
+  const input = main.querySelector('#pinInput');
+  const err = main.querySelector('#pinErr');
+  const attempt = async ()=>{
+    const pin = input.value.trim();
+    if(pin.length < 4) return;
+    let ok = false;
+    try{ ok = (await hashPin(pin)) === ADMIN_PIN_HASH; }catch(e){ ok = false; }
+    if(ok){ state.adminUnlocked = true; render(); }
+    else { err.textContent = 'Wrong PIN'; input.value = ''; input.focus(); }
+  };
+  input.addEventListener('input', ()=>{ err.textContent=''; if(input.value.length===4) attempt(); });
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') attempt(); });
+  main.querySelector('#pinGo').addEventListener('click', attempt);
+}
+
+async function downloadBackup(){
+  try{
+    const res = await fetch(FIREBASE_URL+'/.json');
+    if(!res.ok) throw new Error('bad response');
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    const d = new Date();
+    const pad = n=>String(n).padStart(2,'0');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pickem-backup-'+d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    flashBanner('Backup downloaded', false);
+  }catch(e){
+    flashBanner('Backup failed — check your connection and try again', true);
+  }
 }
 
 function renderAdmin(main){
   const week = state.adminWeek;
   let html = '';
+
+  html += '<section class="admin-block"><h2>Backup</h2>';
+  html += '<div class="hint">Downloads everything — players, schedule, results, and every pick — as one file you can keep.</div>';
+  html += '<div class="btn-row"><button class="btn ghost" id="backupBtn">Download backup</button><button class="btn ghost" id="lockAdmin">Lock admin</button></div>';
+  html += '</section>';
 
   html += '<section class="admin-block"><h2>Players</h2>';
   html += '<div id="playersList">';
@@ -1030,6 +1158,9 @@ function renderAdmin(main){
   }
 
   main.innerHTML = html;
+
+  main.querySelector('#backupBtn').addEventListener('click', downloadBackup);
+  main.querySelector('#lockAdmin').addEventListener('click', ()=>{ state.adminUnlocked = false; render(); });
 
   main.querySelectorAll('[data-adweek]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.adminWeek = parseInt(el.dataset.adweek); loadWeek(state.adminWeek).then(render); });
