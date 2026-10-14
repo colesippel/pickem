@@ -67,7 +67,7 @@
 
   main{flex:1;padding:16px;padding-bottom:48px;}
 
-  .weekrow{display:flex;gap:6px;overflow-x:auto;padding:4px 4px 8px 0;margin-bottom:16px;}
+  .weekrow{position:relative;display:flex;gap:6px;overflow-x:auto;padding:4px 4px 8px 0;margin-bottom:16px;}
   .weekchip{
     flex:0 0 auto;padding:8px 16px 8px 12px;border:1px solid var(--border);
     background:var(--surface);color:var(--text-dim);
@@ -79,8 +79,10 @@
 
   select.whoami{
     width:100%;padding:12px;border-radius:6px;border:1px solid var(--border);
-    background:var(--surface);color:var(--text);font-size:15px;font-weight:600;margin-bottom:16px;
-    -webkit-appearance:none;appearance:none;
+    background-color:var(--surface);color:var(--text);font-size:15px;font-weight:600;margin-bottom:16px;
+    -webkit-appearance:none;appearance:none;padding-right:42px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1.5 1.5l5.5 5.5 5.5-5.5' fill='none' stroke='%23C7CBD6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 16px center;
   }
 
   .lockrow{
@@ -300,6 +302,8 @@ const state = {
   tab: 'picks',
   currentPlayerId: null,
   openPickLists: {},
+  weekRowKey: null,
+  weekRowScroll: null,
   loaded: false,
 };
 
@@ -872,6 +876,23 @@ function render(){
   else renderAdmin(main);
 }
 
+// Keeps the week chips row centered on the selected week. Every render rebuilds the row
+// (which would reset it to the far left), so: when the selected week/tab changes we center
+// it, and on plain re-renders we restore wherever the person had scrolled to.
+function syncWeekRowScroll(main, key){
+  const row = main.querySelector('.weekrow');
+  if(!row) return;
+  const chip = row.querySelector('.weekchip.active');
+  if(state.weekRowKey === key && state.weekRowScroll != null){
+    row.scrollLeft = state.weekRowScroll;
+  } else if(chip){
+    row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+    state.weekRowKey = key;
+    state.weekRowScroll = row.scrollLeft;
+  }
+  row.addEventListener('scroll', ()=>{ state.weekRowScroll = row.scrollLeft; });
+}
+
 const POSTSEASON_LABELS = {19:'Wild Card', 20:'Divisional', 21:'Conf. Champ.', 22:'Super Bowl'};
 function weekLabel(week){
   return POSTSEASON_LABELS[week] || ('Week '+week);
@@ -982,6 +1003,7 @@ function renderPicks(main){
     });
   }
   main.innerHTML = html;
+  syncWeekRowScroll(main, 'pk'+week);
 
   main.querySelector('#whoami').addEventListener('change', e=>{
     state.currentPlayerId = e.target.value || null;
@@ -1048,6 +1070,7 @@ async function renderStandings(main){
     html += '<div class="hint" style="margin-top:14px;">'+(weekMode ? 'Showing '+weekLabel(state.standingsWeek)+' only. ' : 'Season standings count every graded game across all weeks. ')+'A missed pick on a game that has started counts as a loss once the game is final.</div>';
   }
   main.innerHTML = html;
+  if(weekMode) syncWeekRowScroll(main, 'st'+state.standingsWeek);
 
   main.querySelectorAll('[data-stmode]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.standingsMode = el.dataset.stmode; render(); });
@@ -1158,6 +1181,7 @@ function renderAdmin(main){
   }
 
   main.innerHTML = html;
+  syncWeekRowScroll(main, 'ad'+week);
 
   main.querySelector('#backupBtn').addEventListener('click', downloadBackup);
   main.querySelector('#lockAdmin').addEventListener('click', ()=>{ state.adminUnlocked = false; render(); });
@@ -1273,6 +1297,9 @@ setInterval(()=>{ if(state.tab==='picks') render(); }, 30000);
 setInterval(()=>{ syncStaleAndActiveWeeks(); }, 3*60*1000);
 
 init().then(()=>{ syncStaleAndActiveWeeks(); });
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>{ state.weekRowKey = null; if(state.loaded) render(); });
+}
 </script>
 </body>
 </html>
