@@ -122,6 +122,10 @@
   }
   .status.open{color:var(--text-dim);background:var(--surface2);}
   .status.locked{color:#fff;background:var(--accent);}
+  .status.live{color:#fff;background:var(--accent);}
+  .livedot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#fff;margin-right:6px;vertical-align:middle;animation:livepulse 1.4s ease-in-out infinite;}
+  @keyframes livepulse{50%{opacity:0.2;}}
+  .teambtn .scoreline.live{color:var(--text);}
   .status.final{color:var(--gold-text);background:var(--gold);}
 
   .matchup{display:flex;gap:8px;}
@@ -302,6 +306,7 @@ const state = {
   tab: 'picks',
   currentPlayerId: null,
   openPickLists: {},
+  live: {},
   weekRowKey: null,
   weekRowScroll: null,
   loaded: false,
@@ -600,11 +605,30 @@ async function fetchEspnScoreboard(week){
 // throughout this app. Spread is stored as {home:'-3.5', away:'+3.5'} straight off
 // ESPN's own point-spread line, so it always reads correctly for whichever side it's
 // shown next to.
+// Running score + clock for games in progress. Kept in memory only (never written to the
+// database) so every phone just reads ESPN itself -- no extra writes, nothing to clean up.
+function liveLabel(cs){
+  const t = (cs && cs.type) || {};
+  if(t.name === 'STATUS_HALFTIME') return 'Halftime';
+  if(/DELAY|SUSPEND/.test(t.name || '')) return t.description || 'Delayed';
+  const p = cs.period || 0;
+  if(t.name === 'STATUS_END_PERIOD') return p > 4 ? 'End of OT' : 'End of Q'+p;
+  const q = p > 4 ? 'OT' : 'Q'+p;
+  return cs.displayClock ? q+' '+cs.displayClock : (t.shortDetail || 'Live');
+}
+// Returns the live entry for a game only if it was refreshed in the last 5 minutes, so a
+// dropped connection can't leave a stale score on screen.
+function liveOf(g){
+  const l = state.live[g.id];
+  return (l && Date.now() - l.at < 5*60*1000) ? l : null;
+}
+
 async function syncWeekFromEspn(week){
   const data = await fetchEspnScoreboard(week);
   if(!data || !data.events) return false;
   const games = state.games[week] || [];
   let changed = false;
+  let liveChanged = false;
   data.events.forEach(ev=>{
     const comp = ev.competitions && ev.competitions[0];
     if(!comp) return;
@@ -653,12 +677,26 @@ async function syncWeekFromEspn(week){
         }
       }
     }
+
+    if(status && status.state === 'in'){
+      const hs = parseInt(home.score, 10);
+      const aw = parseInt(away.score, 10);
+      if(!isNaN(hs) && !isNaN(aw)){
+        const label = liveLabel(comp.status);
+        const prev = state.live[g.id];
+        if(!prev || prev.home!==hs || prev.away!==aw || prev.label!==label) liveChanged = true;
+        state.live[g.id] = {home:hs, away:aw, label, at:Date.now()};
+      }
+    } else if(state.live[g.id]){
+      delete state.live[g.id];
+      liveChanged = true;
+    }
   });
   if(changed){
     await storageSet('games-week-'+week, games);
     state.games[week] = games;
   }
-  return changed;
+  return changed || liveChanged;
 }
 
 // Keeps the currently-viewed week's spreads current, and grades any started-but-
@@ -693,6 +731,7 @@ async function pullPlayoffMatchups(week){
 }
 
 async function syncStaleAndActiveWeeks(){
+  lastSyncAt = Date.now();
   const now = Date.now();
   let anyChanged = false;
   if(state.activeWeek){
@@ -950,7 +989,9 @@ function renderPicks(main){
       const remain = fmtLockRemaining(g.kickoff);
       const myPick = player ? (picks[player]||{})[g.id] : null;
       let statusHtml, statusClass;
+      const live = (!g.winner && kickLocked) ? liveOf(g) : null;
       if(g.winner){ statusHtml = 'Final'; statusClass='final'; }
+      else if(live){ statusHtml = '<span class="livedot"></span>'+esc(live.label); statusClass='live'; }
       else if(kickLocked){ statusHtml = 'Locked'; statusClass='locked'; }
       else { statusHtml = 'Locks in '+remain; statusClass='open'; }
 
@@ -968,7 +1009,9 @@ function renderPicks(main){
           + (logo ? '<img class="teamlogo" src="'+logo+'" alt="" loading="lazy">' : '')
           + '<span class="at">'+(side==='away'?'Away':'Home')+'</span>'+esc(name)
           + (g.records ? '<span class="teamrecord">'+esc(g.records[side])+'</span>' : '')
-          + (g.score ? '<span class="scoreline">'+g.score[side]+'</span>' : (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : ''))
+          + (g.score ? '<span class="scoreline">'+g.score[side]+'</span>'
+              : (live ? '<span class="scoreline live">'+live[side]+'</span>'
+              : (g.spread ? '<span class="spreadline">'+esc(g.spread[side])+'</span>' : '')))
           + '</button>';
       });
       html += '</div>';
@@ -1294,7 +1337,24 @@ document.querySelectorAll('.tab').forEach(t=>{
 });
 
 setInterval(()=>{ if(state.tab==='picks') render(); }, 30000);
-setInterval(()=>{ syncStaleAndActiveWeeks(); }, 3*60*1000);
+// Poll ESPN about every 45 seconds while any game is in its live window, otherwise every
+// 3 minutes -- and not at all while the app is in the background.
+let lastSyncAt = 0;
+function anyGameLive(){
+  const now = Date.now();
+  return state.weeks.some(w=> (state.games[w]||[]).some(g=>{
+    const k = new Date(g.kickoff).getTime();
+    return !g.winner && k <= now && now < k + 5*3600*1000;
+  }));
+}
+async function pollTick(){
+  if(document.hidden) return;
+  const every = anyGameLive() ? 45000 : 180000;
+  if(Date.now() - lastSyncAt < every - 2000) return;
+  await syncStaleAndActiveWeeks();
+}
+setInterval(pollTick, 15000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ lastSyncAt = 0; pollTick(); } });
 
 init().then(()=>{ syncStaleAndActiveWeeks(); });
 if(document.fonts && document.fonts.ready){
