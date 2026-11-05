@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="app-version" content="20261105-212550">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Sip & Linds Pick'em</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -305,6 +306,9 @@ const state = {
   currentPlayerId: null,
   openPickLists: {},
   live: {},
+  pendingWrites: 0,
+  refreshing: false,
+  hiddenAt: null,
   weekRowKey: null,
   weekRowScroll: null,
   loaded: false,
@@ -850,7 +854,9 @@ async function setPick(week, playerId, gameId, side){
     state.picks[week][playerId][gameId] = side;
   }
   render();
+  state.pendingWrites++;
   const ok = await storageSet('picks-week-'+week+'-'+playerId+'-'+gameId, clearing ? null : side);
+  state.pendingWrites--;
   if(!ok) flashBanner('Pick didn\'t save — check your connection and tap it again', true);
 }
 
@@ -859,7 +865,9 @@ async function setLock(week, playerId, locked){
   if(!state.picks[week][playerId]) state.picks[week][playerId] = {};
   state.picks[week][playerId]._locked = locked;
   render();
+  state.pendingWrites++;
   const ok = await storageSet('picks-week-'+week+'-'+playerId+'-_locked', locked);
+  state.pendingWrites--;
   if(!ok) flashBanner('Lock didn\'t save — check your connection and try again', true);
 }
 
@@ -1353,9 +1361,100 @@ async function pollTick(){
   await syncStaleAndActiveWeeks();
 }
 setInterval(pollTick, 15000);
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ lastSyncAt = 0; pollTick(); } });
 
-init().then(()=>{ syncStaleAndActiveWeeks(); });
+// ---- Staying current when the app is reopened -------------------------------------------
+// A home-screen web app can resume from a frozen copy of itself, so on reopening we (1) check
+// whether a newer version of the page has been published and reload into it, and (2) pull
+// fresh picks/results from the database.
+const APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || null;
+
+async function fetchRemoteVersion(){
+  const ctrl = new AbortController();
+  const res = await fetch(location.pathname + '?check=' + Date.now(), {cache:'no-store', signal: ctrl.signal});
+  if(!res.ok) return null;
+  const re = /name="app-version" content="([^"]+)"/;
+  if(!res.body || !res.body.getReader){
+    const m = (await res.text()).match(re);
+    return m ? m[1] : null;
+  }
+  // The version tag sits at the very top of the page, so read just the first chunk
+  // instead of downloading the whole file.
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let text = '';
+  while(text.length < 20000){
+    const {done, value} = await reader.read();
+    if(done) break;
+    text += dec.decode(value, {stream:true});
+    const m = text.match(re);
+    if(m){ ctrl.abort(); return m[1]; }
+  }
+  ctrl.abort();
+  return null;
+}
+
+async function checkForNewVersion(){
+  if(!APP_VERSION) return;
+  try{
+    const remote = await fetchRemoteVersion();
+    if(!remote || remote === APP_VERSION) return;
+    // Only try once per published version, so a stubborn cache can never cause a reload loop.
+    if(sessionStorage.getItem('pickem-reloaded-for') === remote) return;
+    sessionStorage.setItem('pickem-reloaded-for', remote);
+    location.replace(location.pathname + '?v=' + encodeURIComponent(remote));
+  }catch(e){ /* offline or blocked -- just keep going with what we have */ }
+}
+
+async function refreshFromServer(){
+  if(!state.loaded || state.refreshing || state.pendingWrites > 0) return;
+  state.refreshing = true;
+  try{
+    const [players, weeks, games, picks] = await Promise.all([
+      storageGet('players'), storageGet('weeks'), storageGet('games'), storageGet('picks')
+    ]);
+    if(state.pendingWrites > 0) return;   // a pick was tapped while we were fetching
+    if(Array.isArray(players) && players.length) state.players = players;
+    if(Array.isArray(weeks) && weeks.length) state.weeks = weeks.slice().sort((a,b)=>a-b);
+    if(games){
+      Object.keys(games).forEach(k=>{
+        const m = k.match(/^week(\d+)$/);
+        if(m) state.games[parseInt(m[1],10)] = games[k] || [];
+      });
+    }
+    if(picks){
+      const fresh = {};
+      Object.keys(picks).forEach(k=>{
+        const m = k.match(/^week(\d+)$/);
+        if(m) fresh[parseInt(m[1],10)] = picks[k] || {};
+      });
+      state.weeks.forEach(w=>{ if(!fresh[w]) fresh[w] = {}; });
+      state.picks = fresh;
+    }
+  }finally{
+    state.refreshing = false;
+  }
+  // Don't redraw the Admin screen out from under someone who may be mid-edit.
+  if(state.tab !== 'admin') render();
+}
+
+function onResume(awayMs){
+  lastSyncAt = 0;
+  pollTick();
+  if(awayMs >= 30000){
+    checkForNewVersion();
+    refreshFromServer();
+  }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){ state.hiddenAt = Date.now(); }
+  else { onResume(state.hiddenAt ? Date.now() - state.hiddenAt : 0); }
+});
+if(typeof window !== 'undefined' && window.addEventListener){
+  // Restored from the browser's back/forward cache (can happen on iPhone).
+  window.addEventListener('pageshow', e=>{ if(e.persisted) onResume(60000); });
+}
+
+init().then(()=>{ syncStaleAndActiveWeeks(); checkForNewVersion(); });
 if(document.fonts && document.fonts.ready){
   document.fonts.ready.then(()=>{ state.weekRowKey = null; if(state.loaded) render(); });
 }
