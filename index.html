@@ -77,14 +77,6 @@
   }
   .weekchip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
-  select.whoami{
-    width:100%;padding:12px;border-radius:6px;border:1px solid var(--border);
-    background-color:var(--surface);color:var(--text);font-size:15px;font-weight:600;margin-bottom:16px;
-    -webkit-appearance:none;appearance:none;padding-right:42px;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1.5 1.5l5.5 5.5 5.5-5.5' fill='none' stroke='%23C7CBD6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat:no-repeat;background-position:right 16px center;
-  }
-
   .lockrow{
     display:flex;align-items:center;justify-content:space-between;
     background:var(--surface);border:1px solid var(--border);border-radius:6px;
@@ -167,11 +159,17 @@
     font-family:var(--f-condensed);font-size:12px;font-weight:600;letter-spacing:0.03em;
     text-transform:uppercase;color:var(--text-dim);margin-bottom:9px;
   }
-  .progresschips{display:flex;flex-wrap:wrap;gap:6px;}
+  .progresschips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .whoprompt{font-family:var(--f-condensed);font-size:15px;font-weight:600;letter-spacing:0.02em;color:var(--text);margin:2px 0 11px 0;}
   .progresschip{
-    font-family:var(--f-condensed);font-size:11px;font-weight:600;letter-spacing:0.02em;
-    padding:4px 9px;border-radius:3px;border:1px solid var(--border);color:var(--text-dim);
+    font-family:var(--f-condensed);font-size:14px;font-weight:600;letter-spacing:0.02em;
+    padding:10px 4px;border-radius:4px;border:1px solid var(--border);color:var(--text-dim);
+    background:none;cursor:pointer;min-width:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   }
+  .pchipname{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pchipcount{font-size:11px;font-weight:500;letter-spacing:0.03em;opacity:0.9;}
+  .progresschip.active{outline:2px solid var(--text);outline-offset:2px;}
   .progresschip.partial{border-color:var(--gold);color:var(--gold);}
   .progresschip.done{background:rgba(46,139,87,0.18);border-color:var(--win);color:var(--win);}
 
@@ -960,20 +958,18 @@ function renderPicks(main){
     const progress = state.players.map(p=>{
       const rec = picks[p.id] || {};
       const count = games.filter(g=> rec[g.id]).length;
-      return {name:p.name, count, total:games.length};
+      return {id:p.id, name:p.name, count, total:games.length};
     });
     const doneCount = progress.filter(p=>p.count===p.total).length;
-    html += '<div class="progressrow"><div class="progresshead">'+doneCount+' of '+state.players.length+' have all picks in</div><div class="progresschips">'
+    html += '<div class="progressrow"><div class="progresshead">'+doneCount+' of '+state.players.length+' have all picks in</div>'
+      + '<div class="whoprompt">Who are you picking as?</div><div class="progresschips">'
       + progress.map(p=>{
           const st = p.count===p.total ? 'done' : (p.count>0 ? 'partial' : 'none');
-          return '<span class="progresschip '+st+'">'+esc(p.name)+' '+p.count+'/'+p.total+'</span>';
+          return '<button class="progresschip '+st+(player===p.id?' active':'')+'" data-whoami="'+p.id+'"><span class="pchipname">'+esc(p.name)+'</span><span class="pchipcount">'+p.count+'/'+p.total+'</span></button>';
         }).join('')
-      + '</div></div>';
+      + '</div>';
+    html += '</div>';
   }
-
-  html += '<select class="whoami" id="whoami"><option value="">Who are you picking as?</option>' +
-    state.players.map(p=>'<option value="'+p.id+'" '+(p.id===player?'selected':'')+'>'+esc(p.name)+'</option>').join('') +
-    '</select>';
 
   if(player){
     html += '<div class="lockrow"><span class="locklabel">'+(playerLocked?'Picks locked':'Editing enabled')+'</span>'
@@ -1048,10 +1044,6 @@ function renderPicks(main){
   main.innerHTML = html;
   syncWeekRowScroll(main, 'pk'+week);
 
-  main.querySelector('#whoami').addEventListener('change', e=>{
-    state.currentPlayerId = e.target.value || null;
-    render();
-  });
   const lockToggle = main.querySelector('#lockToggle');
   if(lockToggle){
     lockToggle.addEventListener('change', e=>{ setLock(week, player, e.target.checked); });
@@ -1063,6 +1055,13 @@ function renderPicks(main){
         render();
         syncWeekFromEspn(state.activeWeek).then(changed=>{ if(changed) render(); });
       });
+    });
+  });
+  main.querySelectorAll('[data-whoami]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.whoami;
+      state.currentPlayerId = (state.currentPlayerId === id) ? null : id;
+      render();
     });
   });
   main.querySelectorAll('[data-togglepicks]').forEach(el=>{
